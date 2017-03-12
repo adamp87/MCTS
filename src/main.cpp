@@ -7,13 +7,14 @@
 
 #include "defs.hpp"
 #include "mcts.hpp"
+#include "mctree.hpp"
 #include "hearts.hpp"
 
 int main() {
     std::srand(0); // fixed for debugging purpose
 
     Hearts::State state;
-    std::array<MCTS, 4> ai;
+    std::array<MCTS<MCTreeStaticArray>, 4> ai;
     std::array<Hearts::Player, 4> players;
     Hearts::init(state, players);
 
@@ -86,7 +87,7 @@ int main() {
         std::string filename(sstream.str());
         sstream.str(std::string());
 
-        ai[p].printNodeWithChilds(0, 0, sstream);
+        ai[p].printNodeWithChilds(ai[p].getRoot(), 0, sstream);
         file.open(filename);
         file << gameStream.str();
         file << sstream.str();
