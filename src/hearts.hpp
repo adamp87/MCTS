@@ -10,18 +10,14 @@
 
 #include "defs.hpp"
 
+#ifdef __CUDACC__
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
+#endif
+
 class Hearts {
-    static constexpr uint8 player_map[4][4] = { { 0, 1, 2, 3 },
-    { 1, 2, 3, 0 },
-    { 2, 3, 0, 1 },
-    { 3, 0, 1, 2 } };
-
-    static constexpr uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-
-    static uint8 getHighestPlayerMapID(const std::array<uint8, 52>& order, uint8 round, const uint8* playerMap) {
+    CUDA_CALLABLE_MEMBER static uint8 getHighestPlayerMapID(const uint8* order, uint8 round, const uint8* playerMap) {
         uint8 color_first = order[round * 4] / 13;
         uint8 highest_value = order[round * 4] % 13;
         uint8 highest_player = 0;
@@ -39,7 +35,7 @@ class Hearts {
 public:
     struct Player {
         uint8 player; // fixed player id
-        std::array<uint8, 52> hand; // 4-unknown, can store info after swap
+        uint8 hand[52]; // 4-unknown, can store info after swap
     };
 
     class State {
@@ -47,10 +43,10 @@ public:
         uint8 turn; // 4
         uint8 startPlayer;
         bool heartsBroken;
-        const uint8* player_map;
-        std::array<uint8, 52> orderInTime; //index time-value card
-        std::array<uint8, 52> orderAtCard; //index card-value time
-        std::array<bool, 4 * 4> hasNoColor; //player showed that he has no color(known by other players)
+        uint8 player_map[4];
+        uint8 orderInTime[52]; //index time-value card
+        uint8 orderAtCard[52]; //index card-value time
+        bool hasNoColor[4 * 4]; //player showed that he has no color(known by other players)
 
         friend class Hearts;
         friend class FlowNetwork;
@@ -66,27 +62,45 @@ public:
             return player_map[turn];
         }
 
-        bool isTerminal() const {
+        uint8 getCardAtTime(uint8 order) const {
+            return orderInTime[order];
+        }
+
+        CUDA_CALLABLE_MEMBER bool isTerminal() const {
             return round == 13;
         }
 
-        uint8 getCardAtTime(uint8 order) const {
-            return orderInTime[order];
+        CUDA_CALLABLE_MEMBER static void setPlayerMap(uint8 player, uint8* map) {
+            const uint8 cplayer_map[4][4] = { { 0, 1, 2, 3 },
+                                              { 1, 2, 3, 0 },
+                                              { 2, 3, 0, 1 },
+                                              { 3, 0, 1, 2 } };
+            for (uint8 i = 0; i < 4; ++i) {
+                map[i] = cplayer_map[player][i];
+            }
         }
     };
 
     class FlowNetwork {
         static constexpr uint8 node_s = 0;
         static constexpr uint8 node_t = 9;
-        static constexpr uint8 node_c[4] = { 1, 2, 3, 4 };
-        static constexpr uint8 node_p[4] = { 5, 6, 7, 8 };
+        static constexpr uint8 node_cA[4] = { 1, 2, 3, 4 };
+        static constexpr uint8 node_pA[4] = { 5, 6, 7, 8 };
         static constexpr uint8 nodeCount = 10;
 
-        static uint8 getEdge(uint8 i, uint8 j) {
+        constexpr static CUDA_CALLABLE_MEMBER uint8 get_node_c(uint8 idx) { return node_cA[idx]; }
+        constexpr static CUDA_CALLABLE_MEMBER uint8 get_node_p(uint8 idx) { return node_pA[idx]; }
+
+        static CUDA_CALLABLE_MEMBER void get_node(uint8* c, uint8* p) {
+            c[0] = get_node_c(0); c[1] = get_node_c(1); c[2] = get_node_c(2); c[3] = get_node_c(3);
+            p[0] = get_node_p(0); p[1] = get_node_p(1); p[2] = get_node_p(2); p[3] = get_node_p(3);
+        }
+
+        CUDA_CALLABLE_MEMBER static uint8 getEdge(uint8 i, uint8 j) {
             return j*nodeCount + i; //NOTE: findPath() speed is critical: use j*n+i
         }
 
-        static uint8 findPath(const uint8* graph, uint8* path) {
+        CUDA_CALLABLE_MEMBER static uint8 findPath(const uint8* graph, uint8* path) {
             uint8 v = 0;
             uint8 nStack = 1;
             uint8 stack[nodeCount];
@@ -128,7 +142,7 @@ public:
             return nStack;
         }
 
-        static bool _verify(uint8* graph, uint8 player) {
+        CUDA_CALLABLE_MEMBER static bool _verify(uint8* graph, uint8 player) {
             uint8 path[nodeCount];
 
             while (true) {
@@ -161,18 +175,19 @@ public:
             }
 
             // if not all source edges are saturaded, game would be invalid
-            for (uint8 color = 0; color < 4; ++color) {
-                if (graph[getEdge(node_s, node_c[color])] != 0) {
-                    return false;
-                }
-            }
-            return true;
+            return graph[getEdge(node_s, get_node_c(0))] == 0
+                && graph[getEdge(node_s, get_node_c(1))] == 0
+                && graph[getEdge(node_s, get_node_c(2))] == 0
+                && graph[getEdge(node_s, get_node_c(3))] == 0;
         }
 
     public:
         typedef uint8 Graph[nodeCount * nodeCount];
 
-        static void init(const Hearts::State& state, const Hearts::Player& ai, Graph& graph) {
+        CUDA_CALLABLE_MEMBER static void init(const Hearts::State& state, const Hearts::Player& ai, Graph& graph) {
+            uint8 node_c[4];
+            uint8 node_p[4];
+            get_node(node_c, node_p);
             for (uint8 i = 0; i < nodeCount * nodeCount; ++i) {
                 graph[i] = 0;
             }
@@ -214,8 +229,11 @@ public:
             }
         }
 
-        static bool verifyOneColor(const uint8* _graph, uint8 player, uint8 color) {
+        CUDA_CALLABLE_MEMBER static bool verifyOneColor(const uint8* _graph, uint8 player, uint8 color) {
             Graph graph;
+            uint8 node_c[4];
+            uint8 node_p[4];
+            get_node(node_c, node_p);
             for (uint8 i = 0; i < nodeCount * nodeCount; ++i) {
                 graph[i] = _graph[i];
             }
@@ -224,8 +242,11 @@ public:
             return _verify(graph, player);
         }
 
-        static bool verifyOneCard(const uint8* _graph, uint8 player, uint8 color) {
+        CUDA_CALLABLE_MEMBER static bool verifyOneCard(const uint8* _graph, uint8 player, uint8 color) {
             Graph graph;
+            uint8 node_c[4];
+            uint8 node_p[4];
+            get_node(node_c, node_p);
             for (uint8 i = 0; i < nodeCount * nodeCount; ++i) {
                 graph[i] = _graph[i];
             }
@@ -239,8 +260,11 @@ public:
             return _verify(graph, player);
         }
 
-        static bool verifyHeart(const uint8* _graph, uint8 player) {
+        CUDA_CALLABLE_MEMBER static bool verifyHeart(const uint8* _graph, uint8 player) {
             Graph graph;
+            uint8 node_c[4];
+            uint8 node_p[4];
+            get_node(node_c, node_p);
             for (uint8 i = 0; i < nodeCount * nodeCount; ++i) {
                 graph[i] = _graph[i];
             }
@@ -266,9 +290,9 @@ public:
         state.round = 0;
         state.startPlayer = 0;
         state.heartsBroken = false;
-        state.hasNoColor.fill(false);
-        state.orderInTime.fill(State::order_unset);
-        state.orderAtCard.fill(State::order_unset);
+        std::fill(state.hasNoColor, state.hasNoColor + 4 * 4, false);
+        std::fill(state.orderInTime, state.orderInTime + 52, State::order_unset);
+        std::fill(state.orderAtCard, state.orderAtCard + 52, State::order_unset);
 
         // shuffle deck
         std::vector<uint8> cards(52);
@@ -278,7 +302,7 @@ public:
         // set cards
         for (uint8 i = 0; i < 4; ++i) {
             players[i].player = i;
-            std::fill(players[i].hand.begin(), players[i].hand.end(), 4);//set to unknown
+            std::fill(players[i].hand, players[i].hand + 52, 4);//set to unknown
             for (uint8 j = 0; j < 13; ++j) {
                 uint8 card = cards[i * 13 + j];
                 players[i].hand[card] = i; //set card to own id
@@ -287,16 +311,24 @@ public:
                 state.startPlayer = i;
             }
         }
-        state.player_map = Hearts::player_map[state.startPlayer];
+        Hearts::State::setPlayerMap(state.startPlayer, state.player_map);
     }
 
+
     static void getPossibleCards(const State& state, const Player& ai, std::vector<uint8>& cards) {
-        cards.clear();
-        uint8 player = state.player_map[state.turn]; // mapped player id
-        if (state.round == 0 && state.turn == 0 && player == ai.player) { //ai start with first card
-            cards.push_back(0);
+        if (state.round == 0 && state.turn == 0) { //ai start with first card
+            cards.resize(1, 0);
             return;
         }
+
+        cards.resize(52);
+        uint8 count = Hearts::getPossibleCards(state, ai, cards.data());
+        cards.resize(count);
+    }
+
+    CUDA_CALLABLE_MEMBER static uint8 getPossibleCards(const State& state, const Player& ai, uint8* cards) {
+        uint8 count = 0;
+        uint8 player = state.player_map[state.turn]; // mapped player id
 
         uint8 color_first = state.orderInTime[state.round * 4] / 13; //note, must check if not first run
 
@@ -333,7 +365,7 @@ public:
                         continue; //card has been played
 
                     if (ai.hand[card] == ai.player) {
-                        cards.push_back(card); // select card
+                        cards[count++] = card; // select card
                     }
                 }
             }
@@ -394,16 +426,17 @@ public:
                         continue; //card has been played
 
                     if (ai.hand[card] == player || ai.hand[card] == 4) {
-                        cards.push_back(card); // select from known or unknown opponent cards
+                        cards[count++] = card; // select from known or unknown opponent cards
                     }
                 }
             }
         }
+        return count;
 
         //TODO: filter cards (values next to each other), dont forget result is the same for all, dont discard here?
     }
 
-    static void update(State& state, uint8 card) {
+    CUDA_CALLABLE_MEMBER static void update(State& state, uint8 card) {
         //set card order
         uint8 player = state.player_map[state.turn]; // mapped player id
         uint8 order = state.round * 4 + state.turn;
@@ -434,13 +467,23 @@ public:
         state.turn += 1;
         if (state.turn == 4) { //end of round
             uint8 highest_player = getHighestPlayerMapID(state.orderInTime, state.round, state.player_map);
-            state.player_map = Hearts::player_map[highest_player]; // set player map
+            Hearts::State::setPlayerMap(highest_player, state.player_map); // set player map
             state.round += 1;
             state.turn = 0;
         }
     }
 
     static void computePoints(const State& state, std::array<uint8, 4>& points) {
+        computePoints(state, points.data());
+    }
+
+    CUDA_CALLABLE_MEMBER static void computePoints(const State& state, uint8* points) {
+        const uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+
+        uint8 map[4];
         uint8 highestPlayer = state.startPlayer;
         for (uint8 i = 0; i < 4; ++i) {
             points[i] = 0; // clear points
@@ -448,7 +491,7 @@ public:
 
         for (uint8 round = 0; round < 13; ++round) {
             uint8 point = 0;
-            const uint8* map = Hearts::player_map[highestPlayer];
+            Hearts::State::setPlayerMap(highestPlayer, map);
             highestPlayer = getHighestPlayerMapID(state.orderInTime, round, map);
             for (uint8 player = 0; player < 4; ++player) {
                 uint8 card = state.orderInTime[round * 4 + player];
