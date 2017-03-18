@@ -8,28 +8,16 @@
 
 struct RolloutContainer; // forward declaration
 
-#ifdef __CUDACC__
-
-__host__ RolloutContainer* init(uint32 iterations);
-__host__ void free(RolloutContainer* data);
-__host__ unsigned int* cuRollout(const Hearts::State& state,
-                                 const Hearts::Player& ai,
-                                 const uint8* cards,
-                                 uint8 nCards,
-                                 RolloutContainer* data);
-
 class RolloutContainerCPP {
     RolloutContainer* data;
 
+    unsigned int* _cuRollout(const Hearts::State& state,
+                             const Hearts::Player& ai,
+                             const uint8* cards,
+                             uint8 nCards);
 public:
-    RolloutContainerCPP(uint32 iterations) {
-        data = init(iterations);
-    }
-
-    ~RolloutContainerCPP() {
-        free(data);
-        data = 0;
-    }
+    RolloutContainerCPP(uint32 iterations);
+    ~RolloutContainerCPP();
 
     bool hasGPU() const {
         return data != 0;
@@ -44,35 +32,8 @@ public:
         for (uint8 i = 0; i < nCards; ++i) {
             cards[i] = expandables[i]->card;
         }
-        return cuRollout(state, ai, cards, nCards, data);
+        return _cuRollout(state, ai, cards, nCards);
     }
 };
-
-#else
-
-class RolloutContainerCPP {
-    RolloutContainer* data;
-
-public:
-    RolloutContainerCPP(uint32) {
-        data = 0;
-    }
-
-    ~RolloutContainerCPP() {
-    }
-
-    bool hasGPU() const {
-        return false;
-    }
-
-    template <class TNode>
-    unsigned int* rollout(const Hearts::State&,
-                          const Hearts::Player&,
-                          const std::vector<TNode>&) {
-        return 0; // should not be called
-    }
-};
-
-#endif
 
 #endif // MCTS_CUH

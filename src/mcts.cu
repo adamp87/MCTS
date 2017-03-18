@@ -23,3 +23,19 @@ __host__ RolloutContainer* init(uint32 rollout) {
 __host__ void free(RolloutContainer* data) {
     // implement
 }
+
+RolloutContainerCPP::RolloutContainerCPP(uint32 iterations) {
+    data = init(iterations);
+}
+
+RolloutContainerCPP::~RolloutContainerCPP() {
+    free(data);
+    data = 0;
+}
+
+unsigned int* RolloutContainerCPP::_cuRollout(const Hearts::State& state,
+                                              const Hearts::Player& ai,
+                                              const uint8* cards,
+                                              uint8 nCards) {
+    return cuRollout(state, ai, cards, nCards, data);
+}
