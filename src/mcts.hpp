@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "defs.hpp"
+#include "mcts.cuh"
 #include "hearts.hpp"
 
 template <class TTree>
@@ -126,7 +127,7 @@ private:
         }
     }
 
-    void backprop(std::vector<NodePtr>& visited_nodes, unsigned int* wins, CountType count) {
+    void backprop(std::vector<NodePtr>& visited_nodes, const unsigned int* wins, CountType count) {
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
             node.visits += count;
@@ -191,7 +192,11 @@ private:
 public:
     MCTS() { }
 
-    uint8 execute(const Hearts::State& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
+    uint8 execute(const Hearts::State& cstate,
+                  const Hearts::Player& player,
+                  unsigned int policyIter,
+                  unsigned int rolloutIter,
+                  RolloutContainerCPP* cuda_data) {
         std::array<uint8, 4> points;
         std::vector<uint8> cards_buffer;
         std::vector<NodePtr> policy_nodes;
@@ -214,7 +219,7 @@ public:
             }
         }
 
-        if (true) { // gpu
+        if (cuda_data->hasGPU()) { // gpu
             for (unsigned int i = 0; i < policyIter; ++i) {
                 policy_nodes.clear();
                 // NOTE: copy of state is mandatory
@@ -222,20 +227,12 @@ public:
                 // selection and expansion
                 if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
                     break;
-                // rollout, TODO: do it with cuda
-                unsigned int wins[28*52] = {0};
-                for (unsigned int k = 0; k < expandable_nodes.size(); ++k) {
-                    for (unsigned int j = 0; j < rolloutIter; ++j) {
-                        Hearts::State rstate(state);
-                        Hearts::update(rstate, expandable_nodes[k]->card);
-                        rollout(rstate, player, points, cards_buffer);
-                        wins[k*28+Hearts::mapPoints2Wins(player, points.data())] += 1;
-                    }
-                }
+                // rollout
+                const unsigned int* wins = cuda_data->rollout(state, player, expandable_nodes);
                 //write back results and expand all nodes
                 for (uint8 j = 0; j < expandable_nodes.size(); ++j) {
                     NodePtr& node = expandable_nodes[j];
-                    unsigned int* nodeWins = wins + j * 28;
+                    const unsigned int* nodeWins = wins + j * 28;
                     policy_nodes.push_back(node);
                     backprop(policy_nodes, nodeWins, rolloutIter);
                     backprop(catchup_nodes, nodeWins, rolloutIter);

@@ -7,11 +7,13 @@
 
 #include "defs.hpp"
 #include "mcts.hpp"
+#include "mcts.cuh"
 #include "mctree.hpp"
 #include "hearts.hpp"
 
 int main() {
     std::srand(0); // fixed for debugging purpose
+    std::stringstream gameStream;
 
     Hearts::State state;
     std::array<MCTS<MCTreeStaticArray>, 4> ai;
@@ -20,7 +22,7 @@ int main() {
 
     unsigned int policyIter = 2000;// 100000;
     unsigned int rolloutIter = 10;
-    std::stringstream gameStream;
+    std::unique_ptr<RolloutContainerCPP> cuda_data(new RolloutContainerCPP(rolloutIter));
 
     //cheat, play with open cards
     for (uint8 p = 0; p < 4; ++p) {
@@ -59,7 +61,7 @@ int main() {
         gameStream << "Round " << round + 1 << ":";
         for (uint8 p = 0; p < 4; ++p) {
             uint8 player = state.getPlayer(p);
-            uint8 card = ai[player].execute(state, players[player], policyIter, rolloutIter);
+            uint8 card = ai[player].execute(state, players[player], policyIter, rolloutIter, cuda_data.get());
             Hearts::update(state, card);
 
             std::cout << "P" << int(player) << ": ";
