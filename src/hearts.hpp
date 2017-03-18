@@ -66,6 +66,10 @@ public:
             return orderInTime[order];
         }
 
+        bool isFirstRoundTurn() const {
+            return round == 0 && turn == 0;
+        }
+
         CUDA_CALLABLE_MEMBER bool isTerminal() const {
             return round == 13;
         }
@@ -312,18 +316,6 @@ public:
             }
         }
         Hearts::State::setPlayerMap(state.startPlayer, state.player_map);
-    }
-
-
-    static void getPossibleCards(const State& state, const Player& ai, std::vector<uint8>& cards) {
-        if (state.round == 0 && state.turn == 0) { //ai start with first card
-            cards.resize(1, 0);
-            return;
-        }
-
-        cards.resize(52);
-        uint8 count = Hearts::getPossibleCards(state, ai, cards.data());
-        cards.resize(count);
     }
 
     CUDA_CALLABLE_MEMBER static uint8 getPossibleCards(const State& state, const Player& ai, uint8* cards) {

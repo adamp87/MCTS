@@ -103,15 +103,16 @@ private:
         return false;
     }
 
-    bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points, std::vector<uint8>& cards) {
+    bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points) {
+        uint8 cards[52];
         points.fill(0);
         while (!state.isTerminal()) {
-            Hearts::getPossibleCards(state, player, cards);
-            if (cards.empty()) {
+            uint8 nCards = Hearts::getPossibleCards(state, player, cards);
+            if (nCards == 0) {
                 std::cout << "i";
                 return false; // invalid state
             }
-            uint8 pick = static_cast<uint8>(rand() % cards.size());
+            uint8 pick = static_cast<uint8>(rand() % nCards);
             Hearts::update(state, cards[pick]);
         }
         Hearts::computePoints(state, points);
@@ -197,26 +198,34 @@ public:
                   unsigned int policyIter,
                   unsigned int rolloutIter,
                   RolloutContainerCPP* cuda_data) {
-        std::array<uint8, 4> points;
-        std::vector<uint8> cards_buffer;
         std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
         std::vector<NodePtr> expandable_nodes;
-        cards_buffer.reserve(52);
         policy_nodes.reserve(52);
         catchup_nodes.reserve(52);
         expandable_nodes.reserve(52);
+
+        // starting card
+        if (cstate.isFirstRoundTurn() && player.hand[0] == player.player)
+            return 0;
+
         // walk tree according to state
         NodePtr subroot = catchup(cstate, catchup_nodes);
-        Hearts::getPossibleCards(cstate, player, cards_buffer);
-        if (cards_buffer.size() == 1) {
-            return cards_buffer[0]; // only one choice, dont think
-        }
+
+        // expand subroot if needed
         if (subroot->expanded == 0) {
-            subroot->expanded = 1;
-            for (uint8 card : cards_buffer) {
-                TTree::addNode(subroot, card);
+            expand(subroot, cstate, player);
+        }
+        { // check if only one choice is possible
+            auto it = TTree::getChildIterator(subroot);
+            while (it.hasNext()) {
+                NodePtr child = it.next();
+                expandable_nodes.push_back(child);
             }
+            if (expandable_nodes.size() == 1) {
+                return expandable_nodes[0]->card;
+            }
+            expandable_nodes.clear();
         }
 
         if (cuda_data->hasGPU()) { // gpu
@@ -244,6 +253,7 @@ public:
             }
         }
         else { // cpu
+            std::array<uint8, 4> points;
             for (unsigned int i = 0; i < policyIter; ++i) {
                 policy_nodes.clear();
                 // NOTE: copy of state is mandatory
@@ -258,7 +268,7 @@ public:
                 // rollout
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
                     Hearts::State rstate(state);
-                    rollout(rstate, player, points, cards_buffer);
+                    rollout(rstate, player, points);
                     // backprop
                     backprop(policy_nodes, player, points);
                     backprop(catchup_nodes, player, points);
