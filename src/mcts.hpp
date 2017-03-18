@@ -118,25 +118,20 @@ private:
     }
 
     void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, std::array<uint8, 4>& points) {
+        uint8 win = Hearts::mapPoints2Wins(player, points.data());
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
             node.visits += 1;
-            bool shotTheMoon = false;
-            for (uint8 p = 0; p < 4; ++p) {
-                if (points[p] == 26)
-                    shotTheMoon = true;
-            }
-            if (shotTheMoon == true) {
-                if (points[player.player] == 26) { // current ai shot the moon
-                    node.wins[0] += 1;
-                }
-                else { // someone shot the moon
-                    node.wins[27] += 1;
-                }
-            }
-            else { // normal points (shifted with one)
-                node.wins[points[player.player] + 1] += 1;
-            }
+            node.wins[win] += 1;
+        }
+    }
+
+    void backprop(std::vector<NodePtr>& visited_nodes, unsigned int* wins, CountType count) {
+        for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
+            Node& node = *(*it);
+            node.visits += count;
+            for (uint8 i = 0; i < 28; ++i)
+                node.wins[i] += wins[i];
         }
     }
 
@@ -219,24 +214,58 @@ public:
             }
         }
 
-        for (unsigned int i = 0; i < policyIter; ++i) {
-            policy_nodes.clear();
-            // NOTE: copy of state is mandatory
-            Hearts::State state(cstate);
-            // selection and expansion
-            if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
-                break;
-            NodePtr node = pick(expandable_nodes);
-            Hearts::update(state, node->card);
-            expand(node, state, player);
-            policy_nodes.push_back(node);
-            // rollout
-            for (unsigned int j = 0; j < rolloutIter; ++j) {
-                Hearts::State rstate(state);
-                rollout(rstate, player, points, cards_buffer);
-                // backprop
-                backprop(policy_nodes, player, points);
-                backprop(catchup_nodes, player, points);
+        if (true) { // gpu
+            for (unsigned int i = 0; i < policyIter; ++i) {
+                policy_nodes.clear();
+                // NOTE: copy of state is mandatory
+                Hearts::State state(cstate);
+                // selection and expansion
+                if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
+                    break;
+                // rollout, TODO: do it with cuda
+                unsigned int wins[28*52] = {0};
+                for (unsigned int k = 0; k < expandable_nodes.size(); ++k) {
+                    for (unsigned int j = 0; j < rolloutIter; ++j) {
+                        Hearts::State rstate(state);
+                        Hearts::update(rstate, expandable_nodes[k]->card);
+                        rollout(rstate, player, points, cards_buffer);
+                        wins[k*28+Hearts::mapPoints2Wins(player, points.data())] += 1;
+                    }
+                }
+                //write back results and expand all nodes
+                for (uint8 j = 0; j < expandable_nodes.size(); ++j) {
+                    NodePtr& node = expandable_nodes[j];
+                    unsigned int* nodeWins = wins + j * 28;
+                    policy_nodes.push_back(node);
+                    backprop(policy_nodes, nodeWins, rolloutIter);
+                    backprop(catchup_nodes, nodeWins, rolloutIter);
+                    policy_nodes.pop_back();
+                    Hearts::State estate(state);
+                    Hearts::update(estate, node->card);
+                    expand(node, estate, player);
+                }
+            }
+        }
+        else { // cpu
+            for (unsigned int i = 0; i < policyIter; ++i) {
+                policy_nodes.clear();
+                // NOTE: copy of state is mandatory
+                Hearts::State state(cstate);
+                // selection and expansion
+                if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
+                    break;
+                NodePtr node = pick(expandable_nodes);
+                Hearts::update(state, node->card);
+                expand(node, state, player);
+                policy_nodes.push_back(node);
+                // rollout
+                for (unsigned int j = 0; j < rolloutIter; ++j) {
+                    Hearts::State rstate(state);
+                    rollout(rstate, player, points, cards_buffer);
+                    // backprop
+                    backprop(policy_nodes, player, points);
+                    backprop(catchup_nodes, player, points);
+                }
             }
         }
         return selectBestByValue(subroot);

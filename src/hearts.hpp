@@ -500,6 +500,25 @@ public:
             points[highestPlayer] += point;
         }
     }
+
+    CUDA_CALLABLE_MEMBER static uint8 mapPoints2Wins(const Player& player, uint8* points) {
+        bool shotTheMoon = false;
+        for (uint8 p = 0; p < 4; ++p) {
+            if (points[p] == 26)
+                shotTheMoon = true;
+        }
+        if (shotTheMoon == true) {
+            if (points[player.player] == 26) { // current ai shot the moon
+                return 0;
+            }
+            else { // someone shot the moon
+                return 27;
+            }
+        }
+        else { // normal points (shifted with one)
+            return points[player.player] + 1;
+        }
+    }
 };
 
 #endif //HEARTS_HPP
