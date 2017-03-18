@@ -6,13 +6,23 @@
 
 #include "defs.hpp"
 
-template <typename T_Card = uint8, typename T_Count = std::uint_fast32_t>
+template <typename T_Card = uint8, typename T_Count = uint32>
 struct MCTSNodeBase {
     typedef T_Count CountType;
 
+    uint expanded;
     T_Card card; // card played out
     CountType visits; // node visit count
     CountType wins[28]; // number of results for each points
+
+    MCTSNodeBase() {
+        expanded = 0;
+        card = 255;
+        visits = 1;
+        for (uint8 i = 0; i < 28; ++i) {
+            wins[i] = 0;
+        }
+    }
 };
 
 class MCTreeDynamic {
@@ -55,20 +65,12 @@ private:
 public:
     MCTreeDynamic() {
         root.reset(new Node());
-        root->card = 255;
-        root->visits = 1;
-        for (uint8 i = 0; i < 28; ++i)
-            root->wins[i] = 0;
     }
 
     NodePtr addNode(NodePtr& _parent, uint8 card) {
         // init leaf node
         std::unique_ptr<Node> child(new Node());
-        child->visits = 1;
         child->card = card;
-        for (uint8 i = 0; i < 28; ++i) {
-            child->wins[i] = 0;
-        }
 
         _parent->childs.push_back(std::move(child));
         return _parent->childs.back().get();
@@ -94,6 +96,12 @@ public:
 
         friend class ChildIterator;
         friend class MCTreeStaticArray;
+
+        Node() {
+            for (uint8 i = 0; i < 39; ++i) {
+                childs[i] = 0;
+            }
+        }
     };
 
     class NodePtr {
@@ -153,27 +161,13 @@ private:
 public:
     MCTreeStaticArray() {
         Node root;
-        root.card = 255;
-        root.visits = 1;
-        for (uint8 i = 0; i < 28; ++i)
-            root.wins[i] = 0;
-        for (uint8 i = 0; i < 39; ++i) {
-            root.childs[i] = 0;
-        }
         nodes.push_back(root);
     }
 
     NodePtr addNode(NodePtr& _parent, uint8 card) {
         // init leaf node
         Node child;
-        child.visits = 1;
         child.card = card;
-        for (uint8 i = 0; i < 39; ++i) {
-            child.childs[i] = 0;
-        }
-        for (uint8 i = 0; i < 28; ++i) {
-            child.wins[i] = 0;
-        }
 
         // find next free idx of parent to put child
         uint8 idx = 0;
@@ -218,6 +212,10 @@ public:
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
+
+        Node() {
+            child_first = 0;
+        }
     };
 
     class NodePtr {
@@ -281,11 +279,6 @@ private:
 public:
     MCTreeStaticList() {
         Node root;
-        root.card = 255;
-        root.visits = 1;
-        root.child_first = 0;
-        for (uint8 i = 0; i < 28; ++i)
-            root.wins[i] = 0;
         nodes.push_back(root);
 
         Node::child_element elem;
@@ -296,12 +289,7 @@ public:
     NodePtr addNode(NodePtr& _parent, uint8 card) {
         // init leaf node
         Node child;
-        child.visits = 1;
         child.card = card;
-        child.child_first = 0;
-        for (uint8 i = 0; i < 28; ++i) {
-            child.wins[i] = 0;
-        }
 
         Node& parent = *_parent;
         if (parent.child_first == 0) { // first child
