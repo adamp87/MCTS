@@ -12,7 +12,8 @@
 #include "hearts.hpp"
 
 int main() {
-    std::srand(0); // fixed for debugging purpose
+    unsigned int seed = 0;
+    std::srand(seed); // fixed for debugging purpose
     std::stringstream gameStream;
 
     Hearts::State state;
@@ -21,8 +22,13 @@ int main() {
     Hearts::init(state, players);
 
     unsigned int policyIter = 2000;// 100000;
-    unsigned int rolloutIter = 10;
-    std::unique_ptr<RolloutContainerCPP> cuda_data(new RolloutContainerCPP(rolloutIter));
+    unsigned int rolloutIter = 128;
+    std::unique_ptr<RolloutContainerCPP> cuda_data(new RolloutContainerCPP(rolloutIter, seed));
+    if (cuda_data->hasGPU()) {
+        std::cout << "GPU Mode" << std::endl;
+    } else {
+        std::cout << "CPU Mode" << std::endl;
+    }
 
     //cheat, play with open cards
     for (uint8 p = 0; p < 4; ++p) {

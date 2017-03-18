@@ -1,7 +1,7 @@
 #include "mcts.cuh"
 
 // dummy functions for CPU compilation
-RolloutContainerCPP::RolloutContainerCPP(uint32) {
+RolloutContainerCPP::RolloutContainerCPP(uint32, unsigned int) {
     data = 0;
 }
 

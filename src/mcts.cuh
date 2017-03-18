@@ -16,7 +16,7 @@ class RolloutContainerCPP {
                              const uint8* cards,
                              uint8 nCards);
 public:
-    RolloutContainerCPP(uint32 iterations);
+    RolloutContainerCPP(uint32 iterations, unsigned int seed);
     ~RolloutContainerCPP();
 
     bool hasGPU() const {
