@@ -10,7 +10,7 @@ template <typename T_Card = uint8, typename T_Count = uint32>
 struct MCTSNodeBase {
     typedef T_Count CountType;
 
-    uint expanded;
+    uint8 expanded;
     T_Card card; // card played out
     CountType visits; // node visit count
     CountType wins[28]; // number of results for each points

@@ -28,7 +28,7 @@ public:
                           const Hearts::Player& ai,
                           const std::vector<TNode>& expandables) {
         uint8 cards[52];
-        uint8 nCards = expandables.size();
+        uint8 nCards = static_cast<uint8>(expandables.size());
         for (uint8 i = 0; i < nCards; ++i) {
             cards[i] = expandables[i]->card;
         }

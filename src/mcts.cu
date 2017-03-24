@@ -10,6 +10,8 @@
 #include "mcts.cuh"
 #include "hearts.hpp"
 
+typedef unsigned int uint;
+
 struct RolloutContainer {
     struct Input {
         Hearts::State state;
@@ -75,7 +77,10 @@ __host__ unsigned int* cuRollout(const Hearts::State& state,
     dim3 blocks(data->blockCountPerCard * nCards);
     dim3 threads(data->threadCount);
     rollout<<<blocks, threads>>>(data->u_input, data->d_rnd, data->u_result);
-    cudaDeviceSynchronize();
+    if(cudaDeviceSynchronize() != cudaSuccess) {
+        std::cout << "Failed to sync CUDA call" << std::endl;
+        return 0;
+    }
 
     return data->u_result;
 }
@@ -114,7 +119,10 @@ __host__ RolloutContainer* initData(uint32 rollout, unsigned int seed) {
     }
 
     setup_random<<<data->blockCountPerCard * 52, data->threadCount>>>(data->d_rnd, seed);
-    cudaDeviceSynchronize();
+    if (cudaDeviceSynchronize() != cudaSuccess) {
+        std::cout << "Failed to sync CUDA call" << std::endl;
+        return 0;
+    }
 
     return data.release();
 }

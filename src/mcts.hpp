@@ -51,9 +51,9 @@ private:
         return node;
     }
 
-    NodePtr expand(NodePtr& node,
-                   const Hearts::State& state,
-                   const Hearts::Player& player) {
+    void expand(NodePtr& node,
+                const Hearts::State& state,
+                const Hearts::Player& player) {
         // create childs for node
         uint8 cards[52];
         node->expanded = 1;
