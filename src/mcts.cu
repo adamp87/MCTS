@@ -29,7 +29,7 @@ struct RolloutContainer {
 __global__ void rollout(const RolloutContainer::Input* src,
                         curandState* rnd,
                         unsigned int* dst) {
-    uint cardIdx = gridDim.x / blockIdx.x;
+    uint cardIdx = blockIdx.x / (gridDim.x / src->nCards);
     uint idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     uint8 cards[52];
