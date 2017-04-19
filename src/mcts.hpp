@@ -18,9 +18,29 @@ class MCTS : public TTree {
 
 private:
 
-    NodePtr catchup(const Hearts::State& state, std::vector<NodePtr>& visited_nodes) {
+    struct Traverser {
+        Hearts::State state;
+        std::vector<NodePtr> childBuffer;
+        std::vector<NodePtr> visitedNodes;
+
+        Traverser() {
+            childBuffer.reserve(52);
+            visitedNodes.reserve(52);
+        }
+
+        void reset(const Hearts::State& _state) {
+            state = _state; // NOTE: copy of state is mandatory
+            visitedNodes.clear();
+        }
+    };
+
+    std::vector<NodePtr> catchupNodes;
+    std::vector<Traverser> traversers;
+
+    NodePtr catchup(const Hearts::State& state) {
+        catchupNodes.clear();
         NodePtr node = TTree::getRoot();
-        visited_nodes.push_back(node);
+        catchupNodes.push_back(node);
 
         for (uint8 time = 0; time < 52; ++time) {
             if (state.getCardAtTime(time) == Hearts::State::order_unset)
@@ -39,15 +59,8 @@ private:
             if (!found) { // no child, update tree according to state
                 node = TTree::addNode(node, state.getCardAtTime(time));
             }
-            visited_nodes.push_back(node);
+            catchupNodes.push_back(node);
         }
-        return node;
-    }
-
-    NodePtr pick(const std::vector<NodePtr>& expandables) {
-        // pick next node
-        uint8 pick = static_cast<uint8>(rand() % expandables.size());
-        NodePtr node = expandables[pick];
         return node;
     }
 
@@ -63,44 +76,35 @@ private:
         }
     }
 
-    bool policy(NodePtr node,
-                   Hearts::State& state,
+    NodePtr policy(const NodePtr _node,
                    const Hearts::Player& player,
-                   std::vector<NodePtr>& visited_nodes,
-                   std::vector<NodePtr>& expandables) {
-        while (!state.isTerminal()) {
+                   Traverser& t) {
+        NodePtr node = _node;
+        while (!t.state.isTerminal()) {
             // get childs that are not yet expanded
-            expandables.clear();
+            t.childBuffer.clear();
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
                 if (child->expanded == 0) {
-                    expandables.push_back(child);
+                    t.childBuffer.push_back(child);
                 }
             }
-            if (!expandables.empty()) {
-                return true;
+            if (!t.childBuffer.empty()) {
+                uint8 pick = static_cast<uint8>(rand() % t.childBuffer.size());
+                node = t.childBuffer[pick];
+                t.visitedNodes.push_back(node);
+                return node;
             }
             else {
                 // set node to best leaf
-                NodePtr best = node; // init
-                double best_val = -std::numeric_limits<double>::max();
-                double logParentVisit = 2.0*log(static_cast<double>(node->visits));
-                auto it = TTree::getChildIterator(node);
-                while (it.hasNext()) {
-                    NodePtr child = it.next();
-                    double val = value(child, logParentVisit, player.player != state.getCurrentPlayer());
-                    if (best_val < val) {
-                        best = child;
-                        best_val = val;
-                    }
-                }
-                node = best;
-                visited_nodes.push_back(node);
-                Hearts::update(state, node->card);
+                double parentLogVisit = 2.0*log(static_cast<double>(node->visits));
+                node = selectBestByValue(node, parentLogVisit, player.player != t.state.getCurrentPlayer());
+                t.visitedNodes.push_back(node);
+                Hearts::update(t.state, node->card);
             }
         }
-        return false;
+        return node;
     }
 
     bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points) {
@@ -161,7 +165,7 @@ private:
         return val;
     }
 
-    uint8 selectBestByVisit(NodePtr node) {
+    NodePtr selectBestByVisit(NodePtr node) {
         NodePtr most_ptr = node; // init
         CountType most_visit = 0;
         auto it = TTree::getChildIterator(node);
@@ -172,110 +176,111 @@ private:
                 most_visit = child->visits;
             }
         }
-        return most_ptr->card;
+        return most_ptr;
     }
 
-    uint8 selectBestByValue(NodePtr node) {
+    NodePtr selectBestByValue(NodePtr node, double parentLogVisit = 0.0, bool isOpponent = false) {
         NodePtr best_ptr = node; // init
         double best_val = -std::numeric_limits<double>::max();
         auto it = TTree::getChildIterator(node);
         while (it.hasNext()) {
             NodePtr child = it.next();
-            double val = value(child, 0.0, false);
+            double val = value(child, parentLogVisit, isOpponent);
             if (best_val < val) {
                 best_ptr = child;
                 best_val = val;
             }
         }
-        return best_ptr->card;
+        return best_ptr;
     }
 
 public:
-    MCTS() { }
+    MCTS(unsigned int traverserCount = 1) {
+        catchupNodes.reserve(52);
+        traversers.resize(traverserCount);
+    }
 
     uint8 execute(const Hearts::State& cstate,
                   const Hearts::Player& player,
                   unsigned int policyIter,
                   unsigned int rolloutIter,
                   RolloutContainerCPP* cuda_data) {
-        std::vector<NodePtr> policy_nodes;
-        std::vector<NodePtr> catchup_nodes;
-        std::vector<NodePtr> expandable_nodes;
-        policy_nodes.reserve(52);
-        catchup_nodes.reserve(52);
-        expandable_nodes.reserve(52);
 
         // starting card
         if (cstate.isFirstRoundTurn() && player.hand[0] == player.player)
             return 0;
 
         // walk tree according to state
-        NodePtr subroot = catchup(cstate, catchup_nodes);
+        NodePtr subroot = catchup(cstate);
 
         // expand subroot if needed
         if (subroot->expanded == 0) {
             expand(subroot, cstate, player);
         }
         { // check if only one choice is possible
+            Traverser& t = traversers[0];
+            t.childBuffer.clear();
             auto it = TTree::getChildIterator(subroot);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                expandable_nodes.push_back(child);
+                t.childBuffer.push_back(child);
             }
-            if (expandable_nodes.size() == 1) {
-                return expandable_nodes[0]->card;
+            if (t.childBuffer.size() == 1) {
+                return t.childBuffer[0]->card;
             }
-            expandable_nodes.clear();
         }
 
         if (cuda_data->hasGPU()) { // gpu
+            std::vector<NodePtr> nodes;
+            std::vector<Hearts::State*> states;
+            nodes.reserve(traversers.size());
+            states.reserve(traversers.size());
             for (unsigned int i = 0; i < policyIter; ++i) {
-                policy_nodes.clear();
-                // NOTE: copy of state is mandatory
-                Hearts::State state(cstate);
-                // selection and expansion
-                if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
-                    break;
+                for (size_t j = 0; j < traversers.size(); ++j) {
+                    Traverser& t = traversers[j];
+                    t.reset(cstate);
+                    NodePtr node = policy(subroot, player, t);
+                    if (!t.state.isTerminal())
+                        Hearts::update(t.state, node->card);
+                    nodes.push_back(node);
+                    states.push_back(&t.state);
+                }
                 // rollout
-                const unsigned int* wins = cuda_data->rollout(state, player, expandable_nodes);
-                //write back results and expand all nodes
-                for (uint8 j = 0; j < expandable_nodes.size(); ++j) {
-                    NodePtr& node = expandable_nodes[j];
+                const unsigned int* wins = 0;//cuda_data->rollout(states, player);
+                for (size_t j = 0; j < traversers.size(); ++j) {
+                    NodePtr node = nodes[j];
+                    Traverser& t = traversers[j];
+
                     const unsigned int* nodeWins = wins + j * 28;
-                    policy_nodes.push_back(node);
-                    backprop(policy_nodes, nodeWins, rolloutIter);
-                    backprop(catchup_nodes, nodeWins, rolloutIter);
-                    policy_nodes.pop_back();
-                    Hearts::State estate(state);
-                    Hearts::update(estate, node->card);
-                    expand(node, estate, player);
+                    expand(node, t.state, player);
+                    backprop(catchupNodes, nodeWins, rolloutIter);
+                    backprop(t.visitedNodes, nodeWins, rolloutIter);
                 }
             }
         }
         else { // cpu
             std::array<uint8, 4> points;
+            Traverser& t = traversers[0];
             for (unsigned int i = 0; i < policyIter; ++i) {
-                policy_nodes.clear();
-                // NOTE: copy of state is mandatory
-                Hearts::State state(cstate);
+                t.reset(cstate);
+                t.visitedNodes.push_back(subroot);
                 // selection and expansion
-                if(!policy(subroot, state, player, policy_nodes, expandable_nodes))
+                NodePtr node = policy(subroot, player, t);
+                if (t.state.isTerminal())
                     break;
-                NodePtr node = pick(expandable_nodes);
-                Hearts::update(state, node->card);
-                expand(node, state, player);
-                policy_nodes.push_back(node);
+                Hearts::update(t.state, node->card);
+                expand(node, t.state, player);
                 // rollout
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
-                    Hearts::State rstate(state);
+                    Hearts::State rstate(t.state);
                     rollout(rstate, player, points);
                     // backprop
-                    backprop(policy_nodes, player, points);
-                    backprop(catchup_nodes, player, points);
+                    //backprop(catchupNodes, player, points);
+                    backprop(t.visitedNodes, player, points);
                 }
             }
         }
-        return selectBestByValue(subroot);
+        return selectBestByValue(subroot)->card;
     }
 
     template <typename T>
