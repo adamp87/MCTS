@@ -43,27 +43,28 @@ private:
         return node;
     }
 
-    NodePtr policy(NodePtr node, Hearts::State& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes, std::vector<uint8>& cards) {
+    NodePtr policy(NodePtr node, Hearts::State& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
+        uint8 cards[52];
         while (!state.isTerminal()) {
             // get cards
-            Hearts::getPossibleCards(state, player, cards);
-            if (cards.empty()) // invalid state, rollout will return false, increasing visit count
+            uint8 nCards = Hearts::getPossibleCards(state, player, cards);
+            if (nCards == 0) // invalid state, rollout will return false, increasing visit count
                 return node;
             // remove cards that already have been expanded
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                auto it = std::find(cards.begin(), cards.end(), child->card);
-                if (it != cards.end()) {
+                auto it = std::find(cards, cards + nCards, child->card);
+                if (it != cards + nCards) {
                     //cards.erase(it);
-                    *it = cards.back();
-                    cards.pop_back();
+                    --nCards;
+                    *it = cards[nCards];
                 }
             }
-            if (!cards.empty()) { // node is not fully expanded
+            if (nCards != 0) { // node is not fully expanded
                 // expand
                 // select card and update
-                uint8 pick = static_cast<uint8>(rand() % cards.size());
+                uint8 pick = static_cast<uint8>(rand() % nCards);
                 uint8 card = cards[pick];
                 Hearts::update(state, card);
                 // create child
@@ -93,15 +94,16 @@ private:
         return node;
     }
 
-    bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points, std::vector<uint8>& cards) {
+    bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points) {
+        uint8 cards[52];
         points.fill(0);
         while (!state.isTerminal()) {
-            Hearts::getPossibleCards(state, player, cards);
-            if (cards.empty()) {
+            uint8 nCards = Hearts::getPossibleCards(state, player, cards);
+            if (nCards == 0) {
                 std::cout << "i";
                 return false; // invalid state
             }
-            uint8 pick = static_cast<uint8>(rand() % cards.size());
+            uint8 pick = static_cast<uint8>(rand() % nCards);
             Hearts::update(state, cards[pick]);
         }
         Hearts::computePoints(state, points);
@@ -189,17 +191,23 @@ public:
 
     uint8 execute(const Hearts::State& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
         std::array<uint8, 4> points;
-        std::vector<uint8> cards_buffer;
         std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
-        cards_buffer.reserve(52);
         policy_nodes.reserve(52);
         catchup_nodes.reserve(52);
+
+        // starting card
+        if (cstate.isFirstRoundTurn() && player.hand[0] == player.player)
+            return 0;
+
         // walk tree according to state
         NodePtr subroot = catchup(cstate, catchup_nodes);
-        Hearts::getPossibleCards(cstate, player, cards_buffer);
-        if (cards_buffer.size() == 1) {
-            return cards_buffer[0]; // only one choice, dont think
+        { // only one choice, dont think
+            uint8 cards[52];
+            uint8 nCards = Hearts::getPossibleCards(cstate, player, cards);
+            if (nCards == 1) {
+                return cards[0];
+            }
         }
 
         for (unsigned int i = 0; i < policyIter; ++i) {
@@ -207,11 +215,11 @@ public:
             // NOTE: copy of state is mandatory
             Hearts::State state(cstate);
             // selection and expansion
-            NodePtr node = policy(subroot, state, player, policy_nodes, cards_buffer);
+            NodePtr node = policy(subroot, state, player, policy_nodes);
             // rollout
             for (unsigned int j = 0; j < rolloutIter; ++j) {
                 Hearts::State rstate(state);
-                rollout(rstate, player, points, cards_buffer);
+                rollout(rstate, player, points);
                 // backprop
                 backprop(policy_nodes, player, points);
                 backprop(catchup_nodes, player, points);
