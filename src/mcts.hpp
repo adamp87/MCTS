@@ -40,11 +40,13 @@ private:
             }
             visited_nodes.push_back(node);
         }
+        visited_nodes.pop_back(); // remove subroot from catchup
         return node;
     }
 
     NodePtr policy(NodePtr node, Hearts::State& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
+        visited_nodes.push_back(node); // store subroot as policy
         while (!state.isTerminal()) {
             // get cards
             uint8 nCards = Hearts::getPossibleCards(state, player, cards);
@@ -222,7 +224,7 @@ public:
                 rollout(rstate, player, points);
                 // backprop
                 backprop(policy_nodes, player, points);
-                backprop(catchup_nodes, player, points);
+                //backprop(catchup_nodes, player, points);
             }
         }
         return selectBestByValue(subroot);
