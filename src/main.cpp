@@ -28,10 +28,9 @@ int main() {
     int seed = getSeed();
     std::srand(seed);
 
-    Hearts::State state;
     std::array<MCTS<MCTreeStaticArray>, 4> ai;
     std::array<Hearts::Player, 4> players;
-    Hearts::init(state, players);
+    Hearts state(players);
 
     unsigned int policyIter = 2000;// 100000;
     unsigned int rolloutIter = 10;
@@ -80,7 +79,7 @@ int main() {
         for (uint8 turn = 0; turn < 4; ++turn) {
             uint8 player = state.getPlayer(round * 4 + turn);
             uint8 card = ai[player].execute(state, players[player], policyIter, rolloutIter);
-            Hearts::update(state, card);
+            state.update(card);
 
             std::cout << "P" << int(player) << ": ";
             gameStream << "P" << int(player) << ";";
@@ -93,7 +92,7 @@ int main() {
 
     //print points
     std::array<uint8, 4> points;
-    Hearts::computePoints(state, points);
+    state.computePoints(points);
     for (int p = 0; p < 4; ++p) {
         std::cout << "P" << p << ": " << int(points[p]) << std::endl;
         gameStream << "P" << p << ":" << int(points[p]) << std::endl;

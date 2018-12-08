@@ -29,7 +29,7 @@ class MCTS : public TTree {
 
 private:
 
-    NodePtr catchup(const Hearts::State& state, std::vector<NodePtr>& visited_nodes) {
+    NodePtr catchup(const Hearts& state, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = TTree::getRoot();
         visited_nodes.push_back(node);
 
@@ -56,12 +56,12 @@ private:
         return node;
     }
 
-    NodePtr policy(NodePtr node, Hearts::State& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
+    NodePtr policy(NodePtr node, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isTerminal()) {
             // get cards
-            uint8 nCards = Hearts::getPossibleCards(state, player, cards);
+            uint8 nCards = state.getPossibleCards(player, cards);
             if (debug_invalidState(nCards))
                 return node; // invalid state, rollout will return false, increasing visit count
             // remove cards that already have been expanded
@@ -80,7 +80,7 @@ private:
                 // select card and update
                 uint8 pick = static_cast<uint8>(rand() % nCards);
                 uint8 card = cards[pick];
-                Hearts::update(state, card);
+                state.update(card);
                 // create child
                 node = TTree::addNode(node, card);
                 visited_nodes.push_back(node);
@@ -102,19 +102,19 @@ private:
                 }
                 node = best;
                 visited_nodes.push_back(node);
-                Hearts::update(state, node->card);
+                state.update(node->card);
             }
         }
         return node;
     }
 
-    bool rollout(Hearts::State& state, const Hearts::Player& player) {
+    bool rollout(Hearts& state, const Hearts::Player& player) {
         uint8 cards[52];
         while (!state.isTerminal()) {
-            uint8 nCards = Hearts::getPossibleCards(state, player, cards);
+            uint8 nCards = state.getPossibleCards(player, cards);
             debug_invalidState(nCards);
             uint8 pick = static_cast<uint8>(rand() % nCards);
-            Hearts::update(state, cards[pick]);
+            state.update(cards[pick]);
         }
         return true;
     }
@@ -198,7 +198,7 @@ private:
 public:
     MCTS() { }
 
-    uint8 execute(const Hearts::State& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
+    uint8 execute(const Hearts& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
         std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
         policy_nodes.reserve(52);
@@ -212,7 +212,7 @@ public:
         NodePtr subroot = catchup(cstate, catchup_nodes);
         { // only one choice, dont think
             uint8 cards[52];
-            uint8 nCards = Hearts::getPossibleCards(cstate, player, cards);
+            uint8 nCards = cstate.getPossibleCards(player, cards);
             if (nCards == 1) {
                 return cards[0];
             }
@@ -221,16 +221,16 @@ public:
         for (unsigned int i = 0; i < policyIter; ++i) {
             policy_nodes.clear();
             // NOTE: copy of state is mandatory
-            Hearts::State state(cstate);
+            Hearts state(cstate);
             // selection and expansion
             NodePtr node = policy(subroot, state, player, policy_nodes);
             // rollout
             for (unsigned int j = 0; j < rolloutIter; ++j) {
-                Hearts::State rstate(state);
+                Hearts rstate(state);
                 rollout(rstate, player);
                 // backprop
                 uint8 points[4];
-                Hearts::computePoints(rstate, points);
+                rstate.computePoints(points);
                 backprop(policy_nodes, player, points);
                 //backprop(catchup_nodes, player, points);
             }
@@ -264,7 +264,7 @@ public:
     }
 
     template <typename T>
-    void writeResults(const Hearts::State& state, const Hearts::Player& player, float maxIter, T& stream) {
+    void writeResults(const Hearts& state, const Hearts::Player& player, float maxIter, T& stream) {
 
         stream << "Round;Card;Next;Conf;P-26";
         for (int i = 0; i < 27; ++i)
