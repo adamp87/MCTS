@@ -10,8 +10,23 @@
 #include "mctree.hpp"
 #include "hearts.hpp"
 
+#ifdef __linux__
+#include <ctime>
+#include <unistd.h>
+int getSeed() {
+    return ((time(NULL) & 0xFFFF) | (getpid() << 16));
+}
+#else
+#include <ctime>
+#include <windows.h>
+int getSeed() {
+    return ((time(NULL) & 0xFFFF) | (GetCurrentProcessId() << 16));
+}
+#endif
+
 int main() {
-    std::srand(0); // fixed for debugging purpose
+    int seed = getSeed();
+    std::srand(seed);
 
     Hearts::State state;
     std::array<MCTS<MCTreeStaticArray>, 4> ai;
