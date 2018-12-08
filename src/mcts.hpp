@@ -9,6 +9,18 @@
 #include "defs.hpp"
 #include "hearts.hpp"
 
+bool debug_invalidState(uint8 nCards) {
+#if 0
+    if (nCards != 0)
+        return false;
+
+    std::cout << "i";
+    return true; // invalid state
+#else
+    return false;
+#endif
+}
+
 template <class TTree>
 class MCTS : public TTree {
     typedef typename TTree::Node Node;
@@ -50,8 +62,8 @@ private:
         while (!state.isTerminal()) {
             // get cards
             uint8 nCards = Hearts::getPossibleCards(state, player, cards);
-            if (nCards == 0) // invalid state, rollout will return false, increasing visit count
-                return node;
+            if (debug_invalidState(nCards))
+                return node; // invalid state, rollout will return false, increasing visit count
             // remove cards that already have been expanded
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
@@ -96,23 +108,18 @@ private:
         return node;
     }
 
-    bool rollout(Hearts::State& state, const Hearts::Player& player, std::array<uint8, 4>& points) {
+    bool rollout(Hearts::State& state, const Hearts::Player& player) {
         uint8 cards[52];
-        points.fill(0);
         while (!state.isTerminal()) {
             uint8 nCards = Hearts::getPossibleCards(state, player, cards);
-            if (nCards == 0) {
-                std::cout << "i";
-                return false; // invalid state
-            }
+            debug_invalidState(nCards);
             uint8 pick = static_cast<uint8>(rand() % nCards);
             Hearts::update(state, cards[pick]);
         }
-        Hearts::computePoints(state, points);
-        return true; // valid state
+        return true;
     }
 
-    void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, std::array<uint8, 4>& points) {
+    void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) {
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
             node.visits += 1;
@@ -192,7 +199,6 @@ public:
     MCTS() { }
 
     uint8 execute(const Hearts::State& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
-        std::array<uint8, 4> points;
         std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
         policy_nodes.reserve(52);
@@ -221,8 +227,10 @@ public:
             // rollout
             for (unsigned int j = 0; j < rolloutIter; ++j) {
                 Hearts::State rstate(state);
-                rollout(rstate, player, points);
+                rollout(rstate, player);
                 // backprop
+                uint8 points[4];
+                Hearts::computePoints(rstate, points);
                 backprop(policy_nodes, player, points);
                 //backprop(catchup_nodes, player, points);
             }
