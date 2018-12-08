@@ -262,6 +262,50 @@ public:
         }
         stream << "</" << idx << ">" << std::endl;
     }
+
+    template <typename T>
+    void writeResults(const Hearts::State& state, const Hearts::Player& player, float maxIter, T& stream) {
+
+        stream << "Round;Card;Next;Conf;P-26";
+        for (int i = 0; i < 27; ++i)
+            stream << ";P" << i;
+        stream << std::endl;
+
+        uint8 round = 0;
+        NodePtr parent = TTree::getRoot();
+        NodePtr child = TTree::getRoot();
+        for (uint8 time = 0; time < 52; ++time) {
+            uint8 card = state.getCardAtTime(time);
+
+            auto it = TTree::getChildIterator(parent);
+            while (it.hasNext()) {
+                NodePtr next = it.next();
+                if (next->card == card) {
+                    child = next;
+                    break;
+                }
+            }
+
+            if (player.hand[card] == player.player) {
+                auto itt = TTree::getChildIterator(parent);
+                while (itt.hasNext()) {
+                    NodePtr next = itt.next();
+
+                    stream << (int)round;
+                    stream << ";" << (int)next->card;
+                    stream << ";" << (next->card == child->card) ? int(1) : int(0);
+                    stream << ";" << next->visits / maxIter;
+                    for (uint8 i = 0; i < 28; ++i) {
+                        stream << ";" << next->wins[i] / (float)next->visits;
+                    }
+                    stream << std::endl;
+                }
+                ++round;
+            }
+
+            parent = child;
+        }
+    }
 };
 
 #endif //MCTS_HPP

@@ -51,16 +51,21 @@ int main() {
         }
     }
 
+    std::cout << "Start game with seed:" << seed << std::endl;
+    gameStream << "Seed:" << seed << std::endl;
+    //gameStream << "Cheet On" << std::endl;
+    gameStream << "Cheet Off" << std::endl;
+
     //print player cards
     for (uint8 p = 0; p < 4; ++p) {
         std::cout << "Player" << int(p) << ":";
-        gameStream << "Player" << int(p) << ":";
+        gameStream << "Player" << int(p) << ";";
         for (uint8 color = 0; color < 4; ++color) {
             for (uint8 value = 0; value < 13; ++value) {
                 uint8 card = 13 * color + value;
                 if (players[p].hand[card] == p) {
                     std::cout << int(color) << ":" << int(value) << " ";
-                    gameStream << int(color) << ":" << int(value) << " ";
+                    gameStream << int(color) << ":" << int(value) << "(" << int(card) << ")" << ";";
                 }
             }
         }
@@ -71,16 +76,16 @@ int main() {
     // execute game
     for (uint8 round = 0; round < 13; ++round) {
         std::cout << "Round " << round + 1 << ":";
-        gameStream << "Round " << round + 1 << ":";
+        gameStream << "Round " << round + 1 << ";";
         for (uint8 p = 0; p < 4; ++p) {
             uint8 player = state.getPlayer(p);
             uint8 card = ai[player].execute(state, players[player], policyIter, rolloutIter);
             Hearts::update(state, card);
 
             std::cout << "P" << int(player) << ": ";
-            gameStream << "P" << int(player) << ": ";
+            gameStream << "P" << int(player) << ";";
             std::cout << card / 13 << "," << card % 13 << " ";
-            gameStream << card / 13 << "," << card % 13 << " ";
+            gameStream << card / 13 << ":" << card % 13 << "(" << int(card) << ")" ";";
         }
         std::cout << std::endl;
         gameStream << std::endl;
@@ -91,23 +96,35 @@ int main() {
     Hearts::computePoints(state, points);
     for (int p = 0; p < 4; ++p) {
         std::cout << "P" << p << ": " << int(points[p]) << std::endl;
-        gameStream << "P" << p << ": " << int(points[p]) << std::endl;
+        gameStream << "P" << p << ":" << int(points[p]) << std::endl;
     }
+
+    std::string workDir = "/";
 
     //save tree
     for (int p = 0; p < 4; ++p) {
         std::ofstream file;
+        std::ofstream resFile;
         std::stringstream sstream;
-        sstream << "log/tree_a" << p << "_p" << policyIter << "_r" << rolloutIter << ".txt";
+        //sstream << "log/tree_a" << p << "_p" << policyIter << "_r" << rolloutIter << ".txt";
+        sstream << workDir << "results/seed_" << seed << ".csv";
         std::string filename(sstream.str());
         sstream.str(std::string());
+        sstream << workDir << "results/seed_" << seed << "_player_" << p << ".csv";
+        std::string resFileName(sstream.str());
+        sstream.str(std::string());
 
-        ai[p].printNodeWithChilds(ai[p].getRoot(), 0, sstream);
+        float maxIter = float(policyIter * rolloutIter);
+        resFile.open(resFileName);
+        ai[p].writeResults(state, players[p], maxIter, resFile);
+        
         file.open(filename);
+        //ai[p].printNodeWithChilds(ai[p].getRoot(), 0, sstream);
         file << gameStream.str();
-        file << sstream.str();
+        //file << sstream.str();
     }
-    std::cout << "Bye" << std::endl;
+
+    //std::cout << "Bye" << std::endl;
 
     return 0;
 }
