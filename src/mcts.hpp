@@ -34,7 +34,7 @@ private:
         visited_nodes.push_back(node);
 
         for (uint8 time = 0; time < 52; ++time) {
-            if (state.getCardAtTime(time) == Hearts::State::order_unset)
+            if (!state.isCardAtTimeValid(time))
                 break;
 
             bool found = false;
@@ -94,7 +94,7 @@ private:
                 auto it = TTree::getChildIterator(node);
                 while (it.hasNext()) {
                     NodePtr child = it.next();
-                    double val = value(child, logParentVisit, player.player != state.getCurrentPlayer());
+                    double val = value(child, logParentVisit, player.player != state.getPlayer());
                     if (best_val < val) {
                         best = child;
                         best_val = val;

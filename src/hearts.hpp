@@ -17,21 +17,6 @@
 #endif
 
 class Hearts {
-    CUDA_CALLABLE_MEMBER static uint8 getHighestPlayerMapID(const uint8* order, uint8 round, const uint8* playerMap) {
-        uint8 color_first = order[round * 4] / 13;
-        uint8 highest_value = order[round * 4] % 13;
-        uint8 highest_player = 0;
-        for (uint8 i = 1; i < 4; ++i) {
-            uint8 color_next = order[round * 4 + i] / 13;
-            uint8 value_next = order[round * 4 + i] % 13;
-            if (color_first == color_next && highest_value < value_next) {
-                highest_value = value_next;
-                highest_player = i;
-            }
-        }
-        return playerMap[highest_player];
-    }
-
 public:
     struct Player {
         uint8 player; // fixed player id
@@ -39,31 +24,56 @@ public:
     };
 
     class State {
-        uint8 round; // 13
         uint8 turn; // 4
-        uint8 startPlayer;
-        bool heartsBroken;
-        uint8 player_map[4];
+        uint8 round; // 13
         uint8 orderInTime[52]; //index time-value card
         uint8 orderAtCard[52]; //index card-value time
-        bool hasNoColor[4 * 4]; //player showed that he has no color(known by other players)
+        uint8 orderPlayer[52]; //index time-value player
 
         friend class Hearts;
         friend class FlowNetwork;
 
-    public:
         static constexpr uint8 order_unset = 255;
 
-        uint8 getPlayer(uint8 i) const {
-            return player_map[i];
+        CUDA_CALLABLE_MEMBER void setPlayerOrder(uint8 player) {
+            const uint8 cplayer_map[4][4] = { { 0, 1, 2, 3 },
+                                              { 1, 2, 3, 0 },
+                                              { 2, 3, 0, 1 },
+                                              { 3, 0, 1, 2 } };
+            for (uint8 i = 0; i < 4; ++i) {
+                orderPlayer[round * 4 + i] = cplayer_map[player][i];
+            }
         }
 
-        uint8 getCurrentPlayer() const {
-            return player_map[turn];
+        CUDA_CALLABLE_MEMBER uint8 getPlayerToTakeCards(uint8 round) const {
+            uint8 player = orderPlayer[round * 4];
+            uint8 color_first = orderInTime[round * 4] / 13;
+            uint8 highest_value = orderInTime[round * 4] % 13;
+            for (uint8 i = 1; i < 4; ++i) {
+                uint8 color_next = orderInTime[round * 4 + i] / 13;
+                uint8 value_next = orderInTime[round * 4 + i] % 13;
+                if (color_first == color_next && highest_value < value_next) {
+                    highest_value = value_next;
+                    player = orderPlayer[round * 4 + i];
+                }
+            }
+            return player;
+        }
+
+    public:
+
+        uint8 getPlayer(uint8 time = 255) const {
+            if (time == 255)
+                time = round * 4 + turn;
+            return orderPlayer[time];
         }
 
         uint8 getCardAtTime(uint8 order) const {
             return orderInTime[order];
+        }
+
+        uint8 isCardAtTimeValid(uint8 order) const {
+            return orderInTime[order] != order_unset;
         }
 
         bool isFirstRoundTurn() const {
@@ -72,16 +82,6 @@ public:
 
         CUDA_CALLABLE_MEMBER bool isTerminal() const {
             return round == 13;
-        }
-
-        CUDA_CALLABLE_MEMBER static void setPlayerMap(uint8 player, uint8* map) {
-            const uint8 cplayer_map[4][4] = { { 0, 1, 2, 3 },
-                                              { 1, 2, 3, 0 },
-                                              { 2, 3, 0, 1 },
-                                              { 3, 0, 1, 2 } };
-            for (uint8 i = 0; i < 4; ++i) {
-                map[i] = cplayer_map[player][i];
-            }
         }
     };
 
@@ -188,7 +188,7 @@ public:
     public:
         typedef uint8 Graph[nodeCount * nodeCount];
 
-        CUDA_CALLABLE_MEMBER static void init(const Hearts::State& state, const Hearts::Player& ai, Graph& graph) {
+        CUDA_CALLABLE_MEMBER static void init(const Hearts::State& state, const Hearts::Player& ai, bool* hasNoColor, Graph& graph) {
             uint8 node_c[4];
             uint8 node_p[4];
             get_node(node_c, node_p);
@@ -202,7 +202,7 @@ public:
             }
             for (uint8 p = 0; p < 4; ++p) {
                 if (p < state.turn) { // player already played card within this round
-                    uint8 player = state.player_map[p];
+                    uint8 player = state.orderPlayer[state.round * 4 + p];
                     graph[getEdge(node_p[player], node_t)] -= 1;
                 }
             }
@@ -226,7 +226,7 @@ public:
                 for (uint8 player = 0; player < 4; ++player) {
                     if (player == ai.player)
                         continue; // player know his own cards
-                    if (state.hasNoColor[player * 4 + color] == false) {
+                    if (hasNoColor[player * 4 + color] == false) {
                         graph[getEdge(node_c[color], node_p[player])] = 52;
                     }
                 }
@@ -292,9 +292,7 @@ public:
     static void init(State& state, std::array<Player, 4>& players) {
         state.turn = 0;
         state.round = 0;
-        state.startPlayer = 0;
-        state.heartsBroken = false;
-        std::fill(state.hasNoColor, state.hasNoColor + 4 * 4, false);
+        std::fill(state.orderPlayer, state.orderPlayer + 52, State::order_unset);
         std::fill(state.orderInTime, state.orderInTime + 52, State::order_unset);
         std::fill(state.orderAtCard, state.orderAtCard + 52, State::order_unset);
 
@@ -304,6 +302,7 @@ public:
         std::random_shuffle(cards.begin(), cards.end());
 
         // set cards
+        uint8 startPlayer = 0;
         for (uint8 i = 0; i < 4; ++i) {
             players[i].player = i;
             std::fill(players[i].hand, players[i].hand + 52, 4);//set to unknown
@@ -312,17 +311,16 @@ public:
                 players[i].hand[card] = i; //set card to own id
             }
             if (players[i].hand[0] == i) { // set first player
-                state.startPlayer = i;
+                startPlayer = i;
             }
         }
-        Hearts::State::setPlayerMap(state.startPlayer, state.player_map);
+        state.setPlayerOrder(startPlayer);
     }
 
     CUDA_CALLABLE_MEMBER static uint8 getPossibleCards(const State& state, const Player& ai, uint8* cards) {
         uint8 count = 0;
-        uint8 player = state.player_map[state.turn]; // mapped player id
-
-        uint8 color_first = state.orderInTime[state.round * 4] / 13; //note, must check if not first run
+        uint8 player = state.orderPlayer[state.round * 4 + state.turn]; // mapped player id
+        uint8 colorFirst = state.orderInTime[state.round * 4] / 13; //note, must check if not first run
 
         if (player == ai.player) { // own
             // check if has color
@@ -338,15 +336,25 @@ public:
                 }
             }
 
+            // check if hearts broken
+            bool heartsBroken = false;
+            for(uint8 time = 0; time < state.round * 4 + state.turn; ++time){
+                uint8 color = state.orderInTime[time] / 13;
+                if (color == 3) {
+                    heartsBroken = true;
+                    break;
+                }
+            }
+
             // select cards
             for (uint8 color = 0; color < 4; ++color) {
                 if (aiHasNoColor[color] == true)
                     continue; // ai has no card of this color
-                if (state.turn != 0 && color != color_first && aiHasNoColor[color_first] == false)
+                if (state.turn != 0 && color != colorFirst && aiHasNoColor[colorFirst] == false)
                     continue; // must play same color
                 if (state.round == 0 && color == 3 && !(aiHasNoColor[0] && aiHasNoColor[1] && aiHasNoColor[2]))
                     continue; // in first round no hearts (only if he has only hearts, quite impossible:))
-                if (state.turn == 0 && color == 3 && !(state.heartsBroken || (aiHasNoColor[0] && aiHasNoColor[1] && aiHasNoColor[2])))
+                if (state.turn == 0 && color == 3 && !(heartsBroken || (aiHasNoColor[0] && aiHasNoColor[1] && aiHasNoColor[2])))
                     continue; // if hearts not broken or has other color, no hearts as first card
                 for (uint8 value = 0; value < 13; ++value) {
                     if (state.round == 0 && color == 2 && value == 10)
@@ -365,47 +373,70 @@ public:
         else { // opponent
 
             // check if it is know if opponent has color (swap, open cards)
-            bool hasColor[4];
+            bool knownToHaveColor[4] = { false };
             for (uint8 color = 0; color < 4; ++color) {
-                hasColor[color] = false;
                 for (uint8 value = 0; value < 13; ++value) {
                     uint8 card = color * 13 + value;
                     if (state.orderAtCard[card] != State::order_unset)
                         continue; //card has been played
                     if (ai.hand[card] == player) {
-                        hasColor[color] = true;
+                        knownToHaveColor[color] = true;
                         break;
                     }
                 }
             }
 
+            // check if hearts are broken
+            // check players, if they played other color than the one on the first turn
+            bool heartsBroken = false;
+            bool hasNoColor[4 * 4] = { false };
+            for (uint8 time = 0; time < state.round * 4 + state.turn; ++time) {
+                uint8 _round = time / 4;
+                uint8 _turn = time % 4;
+                uint8 player = state.orderPlayer[time];
+                uint8 firstColor = state.orderInTime[_round * 4] / 13;
+                uint8 nextColor = state.orderInTime[_round * 4 + _turn] / 13;
+                if (_turn == 0 && firstColor == 3 && heartsBroken == false) {
+                    // player starts with hearts and breaks hearts, he has only hearts
+                    for (uint8 i = 0; i < 3; ++i) {
+                        hasNoColor[player * 4 + i] = true;
+                    }
+                }
+                if (firstColor != nextColor) {
+                    // player placed different color
+                    hasNoColor[player * 4 + firstColor] = true;
+                }
+                // must be checked last
+                heartsBroken |= (nextColor == 3);
+            }
+
             FlowNetwork::Graph graph;
-            FlowNetwork::init(state, ai, graph);
+            FlowNetwork::init(state, ai, hasNoColor, graph);
 
             for (uint8 color = 0; color < 4; ++color) {
-                if (state.hasNoColor[player * 4 + color] == true)
+                if (hasNoColor[player * 4 + color] == true)
                     continue; // ai has no card of this color
-                if (state.turn != 0 && color != color_first && hasColor[color_first] == true)
+                if (state.turn != 0 && color != colorFirst && knownToHaveColor[colorFirst] == true)
                     continue; // it is known that ai has card of the first color
-                if (state.turn == 0 && color == 3 && !state.heartsBroken && (hasColor[0] || hasColor[1] || hasColor[2]))
+                if (state.turn == 0 && color == 3 && !heartsBroken && (knownToHaveColor[0] || knownToHaveColor[1] || knownToHaveColor[2]))
                     continue; // player has other color therefore cant start with hearth
                 // theoretically opponent can play any color (he could play hearts even in first round(if he has no other color))
 
                 // verify if flow network breaks by playing a card from the given color
-                if (hasColor[color] == false) {
+                if (knownToHaveColor[color] == false) {
                     if (FlowNetwork::verifyOneCard(graph, player, color) == false)
                         continue;
                 }
 
                 // verify if hearts can be played for the first time as first card
-                if (state.turn == 0 && color == 3 && !state.heartsBroken && hasColor[3] == false) {
+                if (state.turn == 0 && color == 3 && !heartsBroken && knownToHaveColor[3] == false) {
                     if (FlowNetwork::verifyHeart(graph, player) == false)
                         continue;
                 }
 
                 // verify if other color than first can be played
-                if (state.turn != 0 && color != color_first && hasColor[color] == false) {
-                    if (FlowNetwork::verifyOneColor(graph, player, color_first) == false)
+                if (state.turn != 0 && color != colorFirst && knownToHaveColor[color] == false) {
+                    if (FlowNetwork::verifyOneColor(graph, player, colorFirst) == false)
                         continue;
                 }
 
@@ -430,38 +461,17 @@ public:
 
     CUDA_CALLABLE_MEMBER static void update(State& state, uint8 card) {
         //set card order
-        uint8 player = state.player_map[state.turn]; // mapped player id
-        uint8 order = state.round * 4 + state.turn;
-        state.orderInTime[order] = card;
-        state.orderAtCard[card] = order;
-
-        //get first and next card color of round
-        uint8 color_first = state.orderInTime[state.round * 4] / 13;
-        uint8 color_next = card / 13;
-
-        if (state.turn == 0 && color_next == 3) { //player starts with hearts
-            if (state.heartsBroken == false) { // player has only hearts
-                for (uint8 i = 0; i < 3; ++i) {
-                    state.hasNoColor[player * 4 + i] = true;
-                }
-            }
-            state.heartsBroken = true;
-        }
-
-        if (color_first != color_next) { // card color is not the same
-            state.hasNoColor[player * 4 + color_first] = true;
-            if (color_next == 3) { // hearts broken
-                state.heartsBroken = true;
-            }
-        }
+        uint8 time = state.round * 4 + state.turn;
+        state.orderInTime[time] = card;
+        state.orderAtCard[card] = time;
 
         //next player
         state.turn += 1;
         if (state.turn == 4) { //end of round
-            uint8 highest_player = getHighestPlayerMapID(state.orderInTime, state.round, state.player_map);
-            Hearts::State::setPlayerMap(highest_player, state.player_map); // set player map
+            uint8 startPlayer = state.getPlayerToTakeCards(state.round);
             state.round += 1;
             state.turn = 0;
+            state.setPlayerOrder(startPlayer);
         }
     }
 
@@ -475,21 +485,15 @@ public:
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
-        uint8 map[4];
-        uint8 highestPlayer = state.startPlayer;
-        for (uint8 i = 0; i < 4; ++i) {
-            points[i] = 0; // clear points
-        }
-
+        std::fill(points, points + 4, 0);
         for (uint8 round = 0; round < 13; ++round) {
             uint8 point = 0;
-            Hearts::State::setPlayerMap(highestPlayer, map);
-            highestPlayer = getHighestPlayerMapID(state.orderInTime, round, map);
-            for (uint8 player = 0; player < 4; ++player) {
-                uint8 card = state.orderInTime[round * 4 + player];
+            uint8 playerToTake = state.getPlayerToTakeCards(round);
+            for (uint8 turn = 0; turn < 4; ++turn) {
+                uint8 card = state.orderInTime[round * 4 + turn];
                 point += value_map[card]; // add points
             }
-            points[highestPlayer] += point;
+            points[playerToTake] += point;
         }
     }
 };

@@ -77,8 +77,8 @@ int main() {
     for (uint8 round = 0; round < 13; ++round) {
         std::cout << "Round " << round + 1 << ":";
         gameStream << "Round " << round + 1 << ";";
-        for (uint8 p = 0; p < 4; ++p) {
-            uint8 player = state.getPlayer(p);
+        for (uint8 turn = 0; turn < 4; ++turn) {
+            uint8 player = state.getPlayer(round * 4 + turn);
             uint8 card = ai[player].execute(state, players[player], policyIter, rolloutIter);
             Hearts::update(state, card);
 
