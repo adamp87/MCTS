@@ -120,25 +120,22 @@ private:
     }
 
     void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) {
+        // get idx, where winning have to be increased
+        size_t winIdx = points[player.player] + 1; // normal points (shifted with one)
+        for (uint8 p = 0; p < 4; ++p) {
+            if (points[p] == 26) {
+                if (p == player.player)
+                    winIdx = 0; // current ai shot the moon
+                else
+                    winIdx = 27; // other ai shot the moon
+            }
+        }
+
+        // backprop results to visited nodes
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
             node.visits += 1;
-            bool shotTheMoon = false;
-            for (uint8 p = 0; p < 4; ++p) {
-                if (points[p] == 26)
-                    shotTheMoon = true;
-            }
-            if (shotTheMoon == true) {
-                if (points[player.player] == 26) { // current ai shot the moon
-                    node.wins[0] += 1;
-                }
-                else { // someone shot the moon
-                    node.wins[27] += 1;
-                }
-            }
-            else { // normal points (shifted with one)
-                node.wins[points[player.player] + 1] += 1;
-            }
+            node.wins[winIdx] += 1;
         }
     }
 
