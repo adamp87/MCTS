@@ -36,7 +36,7 @@ CUDA_CALLABLE_MEMBER void FlowNetwork::init(const Hearts& state, uint8 ai, const
             uint8 card = color * 13 + value;
             if (state.orderAtCard[card] != Hearts::order_unset)
                 continue; //card has been played
-            if (ai_hand[card] == 4) {
+            if (ai_hand[card] == Hearts::order_unset) {
                 graph[getEdge(node_s, node_c[color])] += 1; // unknown by color
             }
             else if (ai_hand[card] != ai) { // card is known because of swap(or open cards)

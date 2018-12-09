@@ -31,7 +31,7 @@ public:
     //! Stores the cards that only one player knows
     struct Player {
         uint8 player; //!< fixed player id
-        uint8 hand[52]; //!< known cards: index card-value playerid; can store info after swap/open cards, 4-unknown
+        uint8 hand[52]; //!< known cards: index card-value playerid; can store info after swap/open cards
     };
 
 private:
@@ -43,7 +43,7 @@ private:
 
     friend class FlowNetwork;
 
-    static constexpr uint8 order_unset = 255; //!< static variable for unset orders
+    static constexpr uint8 order_unset = 255; //!< static variable for unset orders and cards
 
     //! Set the players order for the next round
     CUDA_CALLABLE_MEMBER void setPlayerOrder(uint8 player) {
@@ -91,7 +91,7 @@ public:
         uint8 startPlayer = 0;
         for (uint8 i = 0; i < 4; ++i) {
             players[i].player = i;
-            std::fill(players[i].hand, players[i].hand + 52, 4);//set to unknown
+            std::fill(players[i].hand, players[i].hand + 52, unset);//set to unknown
             for (uint8 j = 0; j < 13; ++j) {
                 uint8 card = cards[i * 13 + j];
                 players[i].hand[card] = i; //set card to own id
@@ -258,7 +258,7 @@ public:
                     if (orderAtCard[card] != order_unset)
                         continue; //card has been played
 
-                    if (ai.hand[card] == player || ai.hand[card] == 4) {
+                    if (ai.hand[card] == player || ai.hand[card] == Hearts::order_unset) {
                         cards[count++] = card; // select from known or unknown opponent cards
                     }
                 }
