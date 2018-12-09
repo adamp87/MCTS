@@ -117,10 +117,6 @@ public:
         return orderInTime[time] != order_unset;
     }
 
-    bool isFirstRoundTurn() const {
-        return round == 0 && turn == 0;
-    }
-
     CUDA_CALLABLE_MEMBER bool isGameOver() const {
         return round == 13;
     }
@@ -130,6 +126,11 @@ public:
         uint8 count = 0;
         uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
         uint8 colorFirst = orderInTime[round * 4] / 13; //note, must check if not first run
+
+        if (round == 0 && turn == 0) { // starting card
+            cards[0] = 0;
+            return 1;
+        }
 
         if (player == ai.player) { // own
             // check if has color

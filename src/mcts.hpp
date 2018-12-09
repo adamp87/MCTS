@@ -221,10 +221,6 @@ public:
         policy_nodes.reserve(52);
         catchup_nodes.reserve(52);
 
-        // starting card
-        if (cstate.isFirstRoundTurn() && player.hand[0] == player.player)
-            return 0;
-
         // walk tree according to state
         NodePtr subroot = catchup(cstate, catchup_nodes);
         { // only one choice, dont think
