@@ -31,44 +31,39 @@ class FlowNetwork {
     }
 
     CUDA_CALLABLE_MEMBER static uint8 findPath(const uint8* graph, uint8* path) {
-        uint8 v = 0;
+        uint8 v = node_t;
         uint8 nStack = 1;
         uint8 stack[nodeCount];
         uint8 parent[nodeCount] = { 0 };
         bool discovered[nodeCount] = { false };
 
-        stack[0] = node_s;
-        while (nStack != 0 && v != node_t) {
+        // start from sink, because parent stores path in reverse order
+        stack[0] = node_t;
+        while (nStack != 0 && v != node_s) {
             v = stack[--nStack]; // pop
             if (discovered[v] == true)
                 continue; // already discovered
             discovered[v] = true; // marked as discovered
-            for (uint8 i = 1; i < nodeCount; ++i) { //start from 1, as source is always discovered
+            for (uint8 i = 0; i < nodeCount-1; ++i) { //skip sink, as it is always discovered
                 if (discovered[i] == true)
                     continue; // already discovered
-                if (graph[getEdge(v, i)] == 0)
+                if (graph[getEdge(i, v)] == 0)
                     continue; // no edge
                 parent[i] = v; // set predecessor
                 stack[nStack++] = i; // push
             }
         }
 
-        if (parent[node_t] == 0) {
+        if (parent[node_s] == 0)
             return 0; // no path found
-        }
-        //use stack to get reverse path
+
+        // return path from source to sink
         nStack = 0;
-        stack[0] = parent[node_t];
-        while (stack[nStack] != 0)
-        { // get reverse path
-            stack[nStack + 1] = parent[stack[nStack]];
+        path[0] = node_s;
+        while (path[nStack] != node_t) {
+            path[nStack + 1] = parent[path[nStack]];
             ++nStack;
         }
-        //return path in normal order
-        for (uint8 i = 0; i <= nStack; ++i) {
-            path[i] = stack[nStack - i];
-        }
-        path[++nStack] = node_t; // add sink to path
         return nStack;
     }
 
