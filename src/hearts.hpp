@@ -17,24 +17,35 @@
 #define CUDA_CALLABLE_MEMBER
 #endif
 
+//! Stores the state of the game that is known by all players
+/*!
+ * \details This class implements the function getPossibleCards for applying AI.
+ *          This function returns those cards, which can be played in the next turn without breaking the rules.
+ *          It can find cards for both opponent and for itself.
+ *          Other functionalities are helping to simulate a game and to get the number of points at the end of the game.
+ *          The rules of the game are described in Wikipedia under "Hearts (Card Game)".
+ * \author adamp87
+*/
 class Hearts {
 public:
+    //! Stores the cards that only one player knows
     struct Player {
-        uint8 player; // fixed player id
-        uint8 hand[52]; // 4-unknown, can store info after swap
+        uint8 player; //!< fixed player id
+        uint8 hand[52]; //!< known cards: index card-value playerid; can store info after swap/open cards, 4-unknown
     };
 
 private:
-    uint8 turn; // 4
-    uint8 round; // 13
-    uint8 orderInTime[52]; //index time-value card
-    uint8 orderAtCard[52]; //index card-value time
-    uint8 orderPlayer[52]; //index time-value player
+    uint8 turn; //!< current turn, one round has 4 turns
+    uint8 round; //!< current round, one game has 13 rounds
+    uint8 orderInTime[52]; //!< game state: index time-value card
+    uint8 orderAtCard[52]; //!< game state: index card-value time
+    uint8 orderPlayer[52]; //!< game state: index time-value player
 
     friend class FlowNetwork;
 
-    static constexpr uint8 order_unset = 255;
+    static constexpr uint8 order_unset = 255; //!< static variable for unset orders
 
+    //! Set the players order for the next round
     CUDA_CALLABLE_MEMBER void setPlayerOrder(uint8 player) {
         const uint8 cplayer_map[4][4] = { { 0, 1, 2, 3 },
                                           { 1, 2, 3, 0 },
@@ -45,6 +56,7 @@ private:
         }
     }
 
+    //! Return player who has to take cards at end of turn
     CUDA_CALLABLE_MEMBER uint8 getPlayerToTakeCards(uint8 round) const {
         uint8 player = orderPlayer[round * 4];
         uint8 color_first = orderInTime[round * 4] / 13;
@@ -61,29 +73,7 @@ private:
     }
 
 public:
-
-    uint8 getPlayer(uint8 time = 255) const {
-        if (time == 255)
-            time = round * 4 + turn;
-        return orderPlayer[time];
-    }
-
-    uint8 getCardAtTime(uint8 order) const {
-        return orderInTime[order];
-    }
-
-    uint8 isCardAtTimeValid(uint8 order) const {
-        return orderInTime[order] != order_unset;
-    }
-
-    bool isFirstRoundTurn() const {
-        return round == 0 && turn == 0;
-    }
-
-    CUDA_CALLABLE_MEMBER bool isTerminal() const {
-        return round == 13;
-    }
-
+    //! Shuffle deck and set initial state
     Hearts(std::array<Player, 4>& players) {
         turn = 0;
         round = 0;
@@ -113,9 +103,32 @@ public:
         setPlayerOrder(startPlayer);
     }
 
+    uint8 getPlayer(uint8 time = 255) const {
+        if (time == 255)
+            time = round * 4 + turn;
+        return orderPlayer[time];
+    }
+
+    uint8 getCardAtTime(uint8 time) const {
+        return orderInTime[time];
+    }
+
+    uint8 isCardAtTimeValid(uint8 time) const {
+        return orderInTime[time] != order_unset;
+    }
+
+    bool isFirstRoundTurn() const {
+        return round == 0 && turn == 0;
+    }
+
+    CUDA_CALLABLE_MEMBER bool isGameOver() const {
+        return round == 13;
+    }
+
+    //! Implements game logic, return the possible cards that next player can play
     CUDA_CALLABLE_MEMBER uint8 getPossibleCards(const Player& ai, uint8* cards) const {
         uint8 count = 0;
-        uint8 player = orderPlayer[round * 4 + turn]; // mapped player id
+        uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
         uint8 colorFirst = orderInTime[round * 4] / 13; //note, must check if not first run
 
         if (player == ai.player) { // own
@@ -218,19 +231,19 @@ public:
                     continue; // player has other color therefore cant start with hearth
                 // theoretically opponent can play any color (he could play hearts even in first round(if he has no other color))
 
-                // verify if flow network breaks by playing a card from the given color
+                // verify if game becomes invalid by playing a card from the given color
                 if (knownToHaveColor[color] == false) {
                     if (FlowNetwork::verifyOneCard(graph, player, color) == false)
                         continue;
                 }
 
-                // verify if hearts can be played for the first time as first card
+                // verify if game becomes invalid by playing hearts as first card
                 if (turn == 0 && color == 3 && !heartsBroken && knownToHaveColor[3] == false) {
                     if (FlowNetwork::verifyHeart(graph, player) == false)
                         continue;
                 }
 
-                // verify if other color than first can be played
+                // verify if game becomes invalid if not the first color is played
                 if (turn != 0 && color != colorFirst && knownToHaveColor[color] == false) {
                     if (FlowNetwork::verifyOneColor(graph, player, colorFirst) == false)
                         continue;
@@ -255,6 +268,7 @@ public:
         //TODO: filter cards (values next to each other), dont forget result is the same for all, dont discard here?
     }
 
+    //! Update the game state according to card
     CUDA_CALLABLE_MEMBER void update(uint8 card) {
         //set card order
         uint8 time = round * 4 + turn;
@@ -271,10 +285,12 @@ public:
         }
     }
 
+    //! Compute points for each player
     void computePoints(std::array<uint8, 4>& points) const {
         computePoints(points.data());
     }
 
+    //! Compute points for each player
     CUDA_CALLABLE_MEMBER void computePoints(uint8* points) const {
         const uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

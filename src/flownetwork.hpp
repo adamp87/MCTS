@@ -11,6 +11,25 @@
 
 class Hearts;
 
+//! Flow network to solve assigment problem for unknown cards.
+/*!
+ * \details Example: First round of game, I have twelve clubs.
+ *          I star with clubs-two, second and third player put spades.
+ *          The fourth player must have the last club, otherwise the rules would be broken.
+ *          It must be verified if the fourth player can play other colors.
+ *          This problem is solved with a flownetwork.
+ *
+ *          FlowNetwork is an implementation of the Ford-Fulkerson algorithm.
+ *          The graph is composed as G_{4, 4} complete bipartite graph, with one half connected to a source and the other to a sink.
+ *          In G_{4, 4} one half of vertices represents color, the second represents players.
+ *          The edges of G_{4, 4} have the capacity of 52 (number of cards).
+ *          The complete flow that needs to flow from source to sink is the number of unknown cards.
+ *          The capacity of edges between the source and colors is computed by the number of unknown cards per color.
+ *          The capacity of edges between the players and the sink is computed by the number of unplayed cards per player.
+ *          After the graph is set, specific edges are removed or their capacity is decremented, see specific verify functions.
+ *          A card can be played if the complete flow from source to sink can be sent.
+ * \author adamp87
+*/
 class FlowNetwork {
     static constexpr uint8 node_s = 0;
     static constexpr uint8 node_t = 9;
@@ -27,9 +46,10 @@ class FlowNetwork {
     }
 
     CUDA_CALLABLE_MEMBER static uint8 getEdge(uint8 i, uint8 j) {
-        return j*nodeCount + i; //NOTE: findPath() speed is critical: use j*n+i
+        return j*nodeCount + i;
     }
 
+    //! Implements path finding from source to sink by depth-first search
     CUDA_CALLABLE_MEMBER static uint8 findPath(const uint8* graph, uint8* path) {
         uint8 v = node_t;
         uint8 nStack = 1;
@@ -67,13 +87,15 @@ class FlowNetwork {
         return nStack;
     }
 
-    CUDA_CALLABLE_MEMBER static bool _verify(uint8* graph, uint8 player) {
+    //! Implements Ford-Fulkerson algorithm, see Wikipedia
+    CUDA_CALLABLE_MEMBER static bool _verify(uint8* graph) {
         uint8 path[nodeCount];
 
         while (true) {
             uint8 pathLength = findPath(graph, path);
             if (pathLength == 0)
                 break;
+
             // get capacity of path
             uint8 cap = 52; //set to max
             uint8 v1 = node_s;
@@ -109,8 +131,10 @@ class FlowNetwork {
 public:
     typedef uint8 Graph[nodeCount * nodeCount];
 
+    //! Init graph as described in FlowNetwork documentation
     CUDA_CALLABLE_MEMBER static void init(const Hearts& state, uint8 ai, const uint8* ai_hand, const bool* hasNoColor, Graph& graph);
 
+    //! Verify if game becomes invalid by assuming that a player has no card of the given color
     CUDA_CALLABLE_MEMBER static bool verifyOneColor(const uint8* _graph, uint8 player, uint8 color) {
         Graph graph;
         uint8 node_c[4];
@@ -121,9 +145,10 @@ public:
         }
         graph[getEdge(node_c[color], node_p[player])] = 0; // deactivate edge
 
-        return _verify(graph, player);
+        return _verify(graph);
     }
 
+    //! Verify if game becomes invalid by assuming that a player playes one card from a given color
     CUDA_CALLABLE_MEMBER static bool verifyOneCard(const uint8* _graph, uint8 player, uint8 color) {
         Graph graph;
         uint8 node_c[4];
@@ -139,9 +164,10 @@ public:
         graph[getEdge(node_s, node_c[color])] -= 1; // decrement unknow cards for color
         graph[getEdge(node_p[player], node_t)] -= 1; // decrement unknow cards for player
 
-        return _verify(graph, player);
+        return _verify(graph);
     }
 
+    //! Verify if game becomes invalid by assuming that a player has only hearts
     CUDA_CALLABLE_MEMBER static bool verifyHeart(const uint8* _graph, uint8 player) {
         Graph graph;
         uint8 node_c[4];
@@ -153,7 +179,7 @@ public:
         for (uint8 i = 0; i < 3; ++i)
             graph[getEdge(node_c[i], node_p[player])] = 0; // deactivate all edges, except heart
 
-        return _verify(graph, player);
+        return _verify(graph);
     }
 
     static void printGraph(const uint8* graph) {

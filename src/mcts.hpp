@@ -21,6 +21,21 @@ bool debug_invalidState(uint8 nCards) {
 #endif
 }
 
+//! Monte Carlo tree search to apply AI
+/*!
+ * \details This class implements Monte Carlo tree search as described in Wikipedia.
+ *          It follows the policy-rollout-backprop idea.
+ *          Before policy, it walks the tree according to the current state of the game, this is called catchup.
+ *          The game Hearts does not a have a single win/lose outcome, it has a range of points that need to be avoided.
+ *          To get a win value for node evaluation, the number wins/points are weighted by a distribution and summed.
+ *          This mechanism is implemented in this class.
+ *          To have a generic tree search class, this should de detached in the future.
+ *
+ *          The underlying data container is transparent for this class.
+ *          A container must support the template interface required by the tree search.
+ *          This is not documented, but the MCTreeDynamic class is the easiest to understand the interface.
+ * \author adamp87
+*/
 template <class TTree>
 class MCTS : public TTree {
     typedef typename TTree::Node Node;
@@ -28,7 +43,7 @@ class MCTS : public TTree {
     typedef typename Node::CountType CountType;
 
 private:
-
+    //! Walk the tree according to the state of the game
     NodePtr catchup(const Hearts& state, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = TTree::getRoot();
         visited_nodes.push_back(node);
@@ -56,11 +71,12 @@ private:
         return node;
     }
 
+    //! Applies the policy step of the Tree Search
     NodePtr policy(NodePtr node, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
         visited_nodes.push_back(node); // store subroot as policy
         double subRootVisitLog = log(static_cast<double>(node->visits));
-        while (!state.isTerminal()) {
+        while (!state.isGameOver()) {
             // get cards
             uint8 nCards = state.getPossibleCards(player, cards);
             if (debug_invalidState(nCards))
@@ -108,9 +124,10 @@ private:
         return node;
     }
 
+    //! Applies the rollout step of the Tree Search
     bool rollout(Hearts& state, const Hearts::Player& player) {
         uint8 cards[52];
-        while (!state.isTerminal()) {
+        while (!state.isGameOver()) {
             uint8 nCards = state.getPossibleCards(player, cards);
             debug_invalidState(nCards);
             uint8 pick = static_cast<uint8>(rand() % nCards);
@@ -119,6 +136,7 @@ private:
         return true;
     }
 
+    //! Applies the backprop step of the Tree Search
     void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) {
         // get idx, where winning have to be increased
         size_t winIdx = points[player.player] + 1; // normal points (shifted with one)
@@ -139,6 +157,7 @@ private:
         }
     }
 
+    //! Returns the value of a node for tree search evaluation
     double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent) const {
         const double c = 1.4142135623730950488016887242097; //sqrt(2)
         const double distribution[28] = { //exponential distibution from -1 to +1
@@ -157,7 +176,7 @@ private:
         }
 
         if (isOpponent)
-            q *= -1; // opponent is trying to maximalize points
+            q = -q; // opponent is trying to maximalize points
         double n = static_cast<double>(node.visits);
         double val = q / n + c*sqrt(subRootVisitLog / n);
         return val;
@@ -195,6 +214,7 @@ private:
 public:
     MCTS() { }
 
+    //! Execute a search on the current state for the player, return the cards to play
     uint8 execute(const Hearts& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
         std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
