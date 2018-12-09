@@ -282,7 +282,8 @@ public:
             uint8 startPlayer = getPlayerToTakeCards(round);
             round += 1;
             turn = 0;
-            setPlayerOrder(startPlayer);
+            if (round != 13)
+                setPlayerOrder(startPlayer);
         }
     }
 
