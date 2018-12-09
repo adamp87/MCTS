@@ -59,6 +59,7 @@ private:
     NodePtr policy(NodePtr node, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
         visited_nodes.push_back(node); // store subroot as policy
+        double subRootVisitLog = log(static_cast<double>(node->visits));
         while (!state.isTerminal()) {
             // get cards
             uint8 nCards = state.getPossibleCards(player, cards);
@@ -90,11 +91,10 @@ private:
                 // set node to best leaf
                 NodePtr best = node; // init
                 double best_val = -std::numeric_limits<double>::max();
-                double logParentVisit = 2.0*log(static_cast<double>(node->visits));
                 auto it = TTree::getChildIterator(node);
                 while (it.hasNext()) {
                     NodePtr child = it.next();
-                    double val = value(child, logParentVisit, player.player != state.getPlayer());
+                    double val = value(child, subRootVisitLog, player.player != state.getPlayer());
                     if (best_val < val) {
                         best = child;
                         best_val = val;
@@ -139,7 +139,7 @@ private:
         }
     }
 
-    double value(const NodePtr& _node, double logParentVisits, bool isOpponent) const {
+    double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent) const {
         const double c = 1.4142135623730950488016887242097; //sqrt(2)
         const double distribution[28] = { //exponential distibution from -1 to +1
             0.112289418368,0.103975630952,0.0962773873887,0.0891491134753,
@@ -159,7 +159,7 @@ private:
         if (isOpponent)
             q *= -1; // opponent is trying to maximalize points
         double n = static_cast<double>(node.visits);
-        double val = q / n + c*sqrt(logParentVisits / n);
+        double val = q / n + c*sqrt(subRootVisitLog / n);
         return val;
     }
 
