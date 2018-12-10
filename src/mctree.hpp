@@ -115,6 +115,7 @@ public:
 */
 class MCTreeStaticArray {
 public:
+    //! One node with childs, interface
     class Node : public MCTSNodeBase<> {
         size_t childs[39]; //!< child indices as fixed length array
 
@@ -156,7 +157,7 @@ public:
 
     //! Iterator to get childs of a node, interface
     class ChildIterator {
-        size_t pos; //!< at position of nodes child container
+        size_t pos; //!< position of the next child in container
         const Node& node; //!< nodes whos childs are iterated
         std::vector<Node>& nodes; //!< reference to tree
 
@@ -248,25 +249,22 @@ public:
  *          The childs are stored as indices.
  *          Each node stores the indices for a next child and for its next brother.
  * \author adamp87
- * \todo cleanup
 */
 class MCTreeStaticList {
 public:
+    //! One node with childs, interface
     class Node : public MCTSNodeBase<> {
-        struct child_element {
-            size_t next;
-            size_t child;
-        };
-
-        size_t child_first;
+        size_t child_head; //!< head of linked list for next child, breadth one level down
+        size_t parent_next; //!< link to next child node of parent (brother), same breadth level
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
     };
 
+    //!< pointer to a node, interface
     class NodePtr {
-        size_t idx;
-        std::vector<Node>& nodes;
+        size_t idx; //!< index of current node
+        std::vector<Node>& nodes; //!< reference to tree
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
@@ -295,88 +293,86 @@ public:
         }
     };
 
+    //! Iterator to get childs of a node, interface
     class ChildIterator {
-        size_t child_idx;
-        std::vector<Node>& nodes;
-        std::vector<Node::child_element>& childs;
+        size_t child_idx;//!< index of current child in tree container
+        std::vector<Node>& nodes; //!< reference to tree
 
         friend class MCTreeStaticList;
 
-        ChildIterator(NodePtr& node, std::vector<Node>& nodes, std::vector<Node::child_element>& childs)
-            : child_idx(node->child_first), nodes(nodes), childs(childs) { }
+        ChildIterator(NodePtr& node, std::vector<Node>& nodes)
+            : child_idx(node->child_head), nodes(nodes) { }
 
     public:
+        //! Returns true if not all childs have been visited, interface
         bool hasNext() const {
             return child_idx != 0;
         }
 
+        //! Return pointer to next child, interface
         NodePtr next() {
-            Node::child_element& child = childs[child_idx];
-            NodePtr ptr(child.child, nodes);
-            child_idx = child.next;
+            NodePtr ptr(child_idx, nodes);
+            Node& child = nodes[child_idx];
+            child_idx = child.parent_next;
             return ptr;
         }
     };
 
 private:
-    std::vector<Node> nodes;
-    std::vector<Node::child_element> childs;
+    std::vector<Node> nodes; //!< array of the nodes, tree
 
 public:
+    //! Construct tree, interface
     MCTreeStaticList() {
         Node root;
         root.card = 255;
         root.visits = 1;
-        root.child_first = 0;
+        root.child_head = 0;
+        root.parent_next = 0;
         for (uint8 i = 0; i < 28; ++i)
             root.wins[i] = 0;
         nodes.push_back(root);
-
-        Node::child_element elem;
-        elem.child = elem.next = 0;
-        childs.push_back(elem);
     }
 
+    //! Add a new node to parent, interface
     NodePtr addNode(NodePtr& _parent, uint8 card) {
         // init leaf node
         Node child;
         child.visits = 1;
         child.card = card;
-        child.child_first = 0;
+        child.child_head = 0;
+        child.parent_next = 0;
         for (uint8 i = 0; i < 28; ++i) {
             child.wins[i] = 0;
         }
 
         Node& parent = *_parent;
-        if (parent.child_first == 0) { // first child
-            parent.child_first = childs.size();
+        if (parent.child_head == 0) { // first child
+            parent.child_head = nodes.size();
         } else { // find next free container of parent to put child
-            size_t elem_idx = parent.child_first;
-            while (childs[elem_idx].next != 0) {
-                elem_idx = childs[elem_idx].next;
+            size_t elem_idx = parent.child_head;
+            while (nodes[elem_idx].parent_next != 0) {
+                elem_idx = nodes[elem_idx].parent_next;
             }
-            childs[elem_idx].next = childs.size();
+            nodes[elem_idx].parent_next = nodes.size();
         }
-
-        size_t child_idx = nodes.size();
-        Node::child_element elem;
-        elem.child = child_idx;
-        elem.next = 0;
-        childs.push_back(elem);
 
         // add leaf to vector and init space for childs
         nodes.push_back(child);
-        return NodePtr(child_idx, nodes);
+        return NodePtr(nodes.size() - 1, nodes);
     }
 
+    //! Get pointer to the root, interface
     NodePtr getRoot() {
         return NodePtr(0, nodes);
     }
 
+    //! Return an iterator to get childs of node, interface
     ChildIterator getChildIterator(NodePtr& node) {
-        return ChildIterator(node, nodes, childs);
+        return ChildIterator(node, nodes);
     }
 
+    //! Can be used for debug, interface for debug
     size_t getNodeId(NodePtr& node) const {
         return node.idx;
     }
