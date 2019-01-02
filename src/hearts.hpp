@@ -220,8 +220,7 @@ public:
                 heartsBroken |= (nextColor == 3);
             }
 
-            FlowNetwork::Graph graph;
-            FlowNetwork::init(*this, ai.player, ai.hand, hasNoColor, graph);
+            FlowNetwork flow(*this, ai.player, ai.hand, hasNoColor);
 
             for (uint8 color = 0; color < 4; ++color) {
                 if (hasNoColor[player * 4 + color] == true)
@@ -234,19 +233,19 @@ public:
 
                 // verify if game becomes invalid by playing a card from the given color
                 if (knownToHaveColor[color] == false) {
-                    if (FlowNetwork::verifyOneCard(graph, player, color) == false)
+                    if (flow.verifyOneCard(player, color) == false)
                         continue;
                 }
 
                 // verify if game becomes invalid by playing hearts as first card
                 if (turn == 0 && color == 3 && !heartsBroken && knownToHaveColor[3] == false) {
-                    if (FlowNetwork::verifyHeart(graph, player) == false)
+                    if (flow.verifyHeart(player) == false)
                         continue;
                 }
 
                 // verify if game becomes invalid if not the first color is played
                 if (turn != 0 && color != colorFirst && knownToHaveColor[color] == false) {
-                    if (FlowNetwork::verifyOneColor(graph, player, colorFirst) == false)
+                    if (flow.verifyOneColor(player, colorFirst) == false)
                         continue;
                 }
 
