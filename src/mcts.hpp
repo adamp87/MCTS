@@ -252,34 +252,30 @@ public:
     }
 
     template <typename T>
-    void printNodeWithChilds(NodePtr _node, uint8 shift, T& stream) {
-        Node& node = *_node;
-        for (uint8 i = 0; i < shift; ++i) {
-            stream << " ";
-        }
-        auto idx = TTree::getNodeId(_node);
-        stream << "<" << idx << ", " << int(node.card / 13) << ":" << int(node.card % 13) << ", Visits: " << int(node.visits) << ", Wins: ";
+    void writeBranchNodes(uint8 branch, NodePtr parent, NodePtr next, uint8 round, float maxIter, uint8 opponent, T& stream) {
+        stream << (int)branch;
+        stream << ";" << TTree::getNodeId(next);
+        stream << ";" << TTree::getNodeId(parent);
+        stream << ";" << (int)round;
+        stream << ";" << (int)next->card;
+        stream << ";" << (int)opponent;
+        stream << ";" << "0"; // not selected
+        stream << ";" << next->visits / maxIter;
         for (uint8 i = 0; i < 28; ++i) {
-            stream << int(node.wins[i]) << ", ";
+            stream << ";" << next->wins[i] / (float)next->visits;
         }
-        stream << ">" << std::endl;
+        stream << std::endl;
 
-        auto it = TTree::getChildIterator(_node);
+        auto it = TTree::getChildIterator(next);
         while (it.hasNext()) {
             NodePtr child = it.next();
-            printNodeWithChilds(child, shift+1, stream);
+            writeBranchNodes(branch+1, next, child, round, maxIter, opponent, stream);
         }
-
-        for (uint8 i = 0; i < shift; ++i) {
-            stream << " ";
-        }
-        stream << "</" << idx << ">" << std::endl;
     }
 
     template <typename T>
-    void writeResults(const Hearts& state, const Hearts::Player& player, float maxIter, T& stream) {
-
-        stream << "Round;Card;Next;Conf;P-26";
+    void writeResults(const Hearts& state, uint8 playerID, float maxIter, T& stream) {
+        stream << "Branch;ID;ParentID;Round;Card;Opponent;Select;Conf;PM";
         for (int i = 0; i < 27; ++i)
             stream << ";P" << i;
         stream << std::endl;
@@ -288,32 +284,33 @@ public:
         NodePtr parent = TTree::getRoot();
         NodePtr child = TTree::getRoot();
         for (uint8 time = 0; time < 52; ++time) {
+            round = time / 4;
             uint8 card = state.getCardAtTime(time);
+            uint8 opponent = state.getPlayer(time) != playerID ? 1 : 0;
 
             auto it = TTree::getChildIterator(parent);
             while (it.hasNext()) {
                 NodePtr next = it.next();
+
                 if (next->card == card) {
-                    child = next;
-                    break;
-                }
-            }
+                    child = next; // set child to selected node
 
-            if (player.hand[card] == player.player) {
-                auto itt = TTree::getChildIterator(parent);
-                while (itt.hasNext()) {
-                    NodePtr next = itt.next();
-
-                    stream << (int)round;
+                    stream << "0"; // not branch node, dont filter
+                    stream << ";" << TTree::getNodeId(next);
+                    stream << ";" << TTree::getNodeId(parent);
+                    stream << ";" << (int)round;
                     stream << ";" << (int)next->card;
-                    stream << ";" << (next->card == child->card) ? int(1) : int(0);
+                    stream << ";" << (int)opponent;
+                    stream << ";" << "1"; // selected
                     stream << ";" << next->visits / maxIter;
                     for (uint8 i = 0; i < 28; ++i) {
                         stream << ";" << next->wins[i] / (float)next->visits;
                     }
                     stream << std::endl;
+
+                } else { // not selected nodes
+                    writeBranchNodes(0, parent, next, round, maxIter, opponent, stream);
                 }
-                ++round;
             }
 
             parent = child;
