@@ -4,7 +4,7 @@ Monte Carlo tree search based gameagent.
 
 * [Game rules](https://en.wikipedia.org/wiki/Hearts)
 * [Monte Carlo tree search](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search)
-* [Fordâ€“Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
+* [Ford–Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
 
 Gameagent is written in C++.
 Only standard C is used, no external library is included.
@@ -26,7 +26,7 @@ A game was simulated, where 3 random players play against one AI with 1e5 policy
 Figure 1 visualizes the game tree of the AI player.
 For easier interpretation, only the nodes with the selected cards for every player and the nodes where the AI has to decide between his cards are shown.
 
-![Figure 1: GameTree of AI](doc/tree.png)
+![F1](doc/tree.png "Figure 1: GameTree of AI.")
 
 The game in Figure 1 shows the following play:
 
@@ -68,11 +68,12 @@ AI decides to put hearts 4, since hearts 5 was still not played.
 First hearts 6, then clubs 9 must be played.
 + Note: swapping of three cards at the beginning is not implemented
 
-![Figure 2: Probability of the final result, for spades 2 and spades queen.](doc/probQueen.png)
+![F2](doc/probQueen.png "Figure 2: Probability of the final result, for spades 2 and spades queen.")
 
 In a win/lose type of game, the evaluation of nodes is done by the count of wins.
 Since hearts is not a win/lose, but a point-evasion game, normalized probabilities for getting a number of points are computed, which can be seen in Figure 3.
 These probability values are weighted and summed to get a value for node evaluation.
+Note: M+ means AI Shot the Moon, M- means opponent Shot the Moon.
 
-![Figure 3: Probability of the final result from round 1 to 7.](doc/prob.png)
+![F3](doc/prob.png "Figure 3: Probability of the final result from round 1 to 7.")
 
