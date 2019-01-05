@@ -24,13 +24,24 @@ int getSeed() {
 }
 #endif
 
+std::string formatCard(uint8 card) {
+    const char colors[] = {'C', 'D', 'S', 'H'};
+    const char values[] = {'2', '3', '4', '5', '6', '7',
+                           '8', '9', '0', 'J', 'Q', 'K', 'A'};
+
+    std::string str("XX");
+    str[0] = colors[card / 13];
+    str[1] = values[card % 13];
+    return str;
+}
+
 int main(int argc, char** argv) {
     int cheat = 0;
     int writeTree = 0;
-    unsigned int seed = getSeed();
-    unsigned int policyIter[4] = {1, 1, 1, 1};
-    unsigned int rolloutIter[4] = {1, 1, 1, 1};
     std::string workDir = "";
+    unsigned int seed = getSeed();
+    unsigned int policyIter[4] = {100, 1000, 10000, 100000};
+    unsigned int rolloutIter[4] = {1, 1, 1, 1};
 
     if (argc == 2 && (argv[1] == "-h" || argv[1] == "--help")) {
         std::cout << "Please look in main.cpp for parameters" << std::endl;
@@ -109,7 +120,7 @@ int main(int argc, char** argv) {
             for (uint8 value = 0; value < 13; ++value) {
                 uint8 card = 13 * color + value;
                 if (players[p].hand[card] == p) {
-                    std::cout << int(color) << ":" << int(value) << " ";
+                    std::cout << formatCard(card) << " ";
                 }
             }
         }
@@ -125,7 +136,7 @@ int main(int argc, char** argv) {
             state.update(card);
 
             std::cout << "P" << int(player) << " ";
-            std::cout << card / 13 << ":" << card % 13 << " ";
+            std::cout << formatCard(card) << " ";
         }
         std::cout << std::endl;
     }
