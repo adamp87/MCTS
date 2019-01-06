@@ -101,6 +101,9 @@ public:
             }
         }
         setPlayerOrder(startPlayer);
+
+        //TODO: discuss 'no bleeding on the first trick'
+        //TODO: it is ok, but 12 hearts and SQ returns no cards
     }
 
     uint8 getPlayer(uint8 time = 255) const {
