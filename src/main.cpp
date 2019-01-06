@@ -168,6 +168,7 @@ int main(int argc, char** argv) {
         file.open(filename.str());
         float maxIter = float(policyIter[p] * rolloutIter[p]);
         ai[p].writeResults(state, p, maxIter, file);
+        file.close();
 
         { // filter results, write only first level branch nodes
             std::ifstream src;
@@ -184,6 +185,8 @@ int main(int argc, char** argv) {
                     continue; // skip lines that not first level branch
                 dst << line << std::endl;
             }
+            dst.close();
+            src.close();
         }
     }
 
