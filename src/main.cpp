@@ -43,8 +43,16 @@ int main(int argc, char** argv) {
     unsigned int policyIter[4] = {100, 1000, 10000, 100000};
     unsigned int rolloutIter[4] = {1, 1, 1, 1};
 
-    if (argc == 2 && (argv[1] == "-h" || argv[1] == "--help")) {
-        std::cout << "Please look in main.cpp for parameters" << std::endl;
+    if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
+        std::cout << "Paramaters:" << std::endl;
+        std::cout << "cheat 0" << std::endl;
+        std::cout << "writeTree 0" << std::endl;
+        std::cout << "workDir path/" << std::endl;
+        std::cout << "seed 123" << std::endl;
+        std::cout << "p0 100 (policy iteration for player0)" << std::endl;
+        std::cout << "p[1,2,3] 100" << std::endl;
+        std::cout << "r0 100 (rollout iteration for player0)" << std::endl;
+        std::cout << "r[1,2,3] 100" << std::endl;
         return 0;
     }
 
