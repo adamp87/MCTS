@@ -82,50 +82,48 @@ private:
             uint8 nCards = state.getPossibleCards(player, cards);
             if (debug_invalidState(nCards))
                 return node; // invalid state, rollout will return false, increasing visit count
-            // remove cards that already have been expanded
 
-            // indent will be fixed in next commit, kept for easy diff
             { // thread-safe scope
-            LockGuard guard(*node); (void)guard;
+                LockGuard guard(*node); (void)guard;
+                auto it = TTree::getChildIterator(node);
+                while (it.hasNext()) { // remove cards that already have been expanded
+                    NodePtr child = it.next();
+                    auto it = std::find(cards, cards + nCards, child->card);
+                    if (it != cards + nCards) {
+                        //cards.erase(it);
+                        --nCards;
+                        *it = cards[nCards];
+                    }
+                }
+                if (nCards != 0) { // node is not fully expanded
+                    // expand
+                    // select card and update
+                    uint8 pick = static_cast<uint8>(rand() % nCards);
+                    uint8 card = cards[pick];
+                    state.update(card);
+                    // create child
+                    node = TTree::addNode(node, card);
+                    visited_nodes.push_back(node);
+                    return node;
+                }
+            } // end of thread-safe scope
+
+            // node fully expanded
+            // set node to best leaf
+            NodePtr best = node; // init
+            double best_val = -std::numeric_limits<double>::max();
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                auto it = std::find(cards, cards + nCards, child->card);
-                if (it != cards + nCards) {
-                    //cards.erase(it);
-                    --nCards;
-                    *it = cards[nCards];
+                double val = value(child, subRootVisitLog, player.player != state.getPlayer());
+                if (best_val < val) {
+                    best = child;
+                    best_val = val;
                 }
             }
-            if (nCards != 0) { // node is not fully expanded
-                // expand
-                // select card and update
-                uint8 pick = static_cast<uint8>(rand() % nCards);
-                uint8 card = cards[pick];
-                state.update(card);
-                // create child
-                node = TTree::addNode(node, card);
-                visited_nodes.push_back(node);
-                return node;
-            }
-            } // end of thread-safe scope
-
-                // node fully expanded
-                // set node to best leaf
-                NodePtr best = node; // init
-                double best_val = -std::numeric_limits<double>::max();
-                auto it = TTree::getChildIterator(node);
-                while (it.hasNext()) {
-                    NodePtr child = it.next();
-                    double val = value(child, subRootVisitLog, player.player != state.getPlayer());
-                    if (best_val < val) {
-                        best = child;
-                        best_val = val;
-                    }
-                }
-                node = best;
-                visited_nodes.push_back(node);
-                state.update(node->card);
+            node = best;
+            visited_nodes.push_back(node);
+            state.update(node->card);
         }
         return node;
     }
