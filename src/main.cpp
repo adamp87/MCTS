@@ -24,6 +24,16 @@ int getSeed() {
 }
 #endif
 
+#ifdef _OPENMP
+typedef MCTreeDynamic<MCTSNodeBaseMT<> > TreeContainer;
+
+// keep static_assert, might be usefull later
+static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<> > >::value,
+              "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
+#else
+typedef MCTreeStaticArray TreeContainer;
+#endif
+
 std::string formatCard(uint8 card) {
     const char colors[] = {'C', 'D', 'S', 'H'};
     const char values[] = {'2', '3', '4', '5', '6', '7',
@@ -104,7 +114,7 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     std::array<Hearts::Player, 4> players;
-    std::array<MCTS<MCTreeStaticArray>, 4> ai;
+    std::array<MCTS<TreeContainer>, 4> ai;
     Hearts state(players);
 
     // cheat, play with open cards

@@ -4,6 +4,9 @@
 #include <vector>
 #include <memory>
 
+#include <mutex>
+#include <atomic>
+
 #include "defs.hpp"
 
 //! Base class for all Tree::Node implementations
@@ -11,9 +14,34 @@ template <typename T_Card = uint8, typename T_Count = std::uint_fast32_t>
 struct MCTSNodeBase {
     typedef T_Count CountType;
 
+    //! Dummy LockGuard, helps to keep policy transparent
+    class LockGuard {
+    public:
+        LockGuard(MCTSNodeBase<T_Card, T_Count>&) {}
+    };
+
     T_Card card; //!< card played out
     CountType visits; //!< node visit count
     CountType wins[28]; //!< number of wins for each points
+};
+
+//! Base class for multithreaded MCTreeDynamic::Node
+template <typename T_Card = uint8, typename T_Count = std::uint_fast32_t>
+struct MCTSNodeBaseMT {
+    typedef T_Count CountType;
+
+    //! LockGuard inherited from std, constructor takes node
+    class LockGuard : public std::lock_guard<std::mutex> {
+    public:
+        LockGuard(MCTSNodeBaseMT<T_Card, T_Count>& node)
+            : std::lock_guard<std::mutex>(node.lock)
+        {}
+    };
+
+    T_Card card; //!< card played out
+    std::mutex lock; //!< mutex for thread-safe policy
+    std::atomic<CountType> visits; //!< node visit count
+    std::atomic<CountType> wins[28]; //!< number of wins for each points
 };
 
 //! Data container, store nodes detached, store childs as pointers
@@ -24,10 +52,11 @@ struct MCTSNodeBase {
  *          Each node stores the pointers in a vector.
  * \author adamp87
 */
+template <typename T_NodeBase = MCTSNodeBase<> >
 class MCTreeDynamic {
 public:
     //! One node with childs, interface
-    class Node : public MCTSNodeBase<> {
+    class Node : public T_NodeBase {
     private:
         std::vector<std::unique_ptr<Node> > childs; //!< store childs as unique pointers
 
@@ -90,12 +119,12 @@ public:
     }
 
     //! Get pointer to the root, interface
-    NodePtr getRoot() {
+    NodePtr getRoot() const {
         return root.get();
     }
 
     //! Return an iterator to get childs of node, interface
-    ChildIterator getChildIterator(NodePtr& node) {
+    ChildIterator getChildIterator(NodePtr& node) const {
         return ChildIterator(node);
     }
 

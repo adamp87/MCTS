@@ -41,6 +41,7 @@ class MCTS : public TTree {
     typedef typename TTree::Node Node;
     typedef typename TTree::NodePtr NodePtr;
     typedef typename Node::CountType CountType;
+    typedef typename Node::LockGuard LockGuard;
 
 private:
     //! Walk the tree according to the state of the game
@@ -82,6 +83,10 @@ private:
             if (debug_invalidState(nCards))
                 return node; // invalid state, rollout will return false, increasing visit count
             // remove cards that already have been expanded
+
+            // indent will be fixed in next commit, kept for easy diff
+            { // thread-safe scope
+            LockGuard guard(*node); (void)guard;
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
@@ -103,7 +108,9 @@ private:
                 visited_nodes.push_back(node);
                 return node;
             }
-            else {
+            } // end of thread-safe scope
+
+                // node fully expanded
                 // set node to best leaf
                 NodePtr best = node; // init
                 double best_val = -std::numeric_limits<double>::max();
@@ -119,13 +126,12 @@ private:
                 node = best;
                 visited_nodes.push_back(node);
                 state.update(node->card);
-            }
         }
         return node;
     }
 
     //! Applies the rollout step of the Tree Search
-    bool rollout(Hearts& state, const Hearts::Player& player) {
+    bool rollout(Hearts& state, const Hearts::Player& player) const {
         uint8 cards[52];
         while (!state.isGameOver()) {
             uint8 nCards = state.getPossibleCards(player, cards);
@@ -137,7 +143,7 @@ private:
     }
 
     //! Applies the backprop step of the Tree Search
-    void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) {
+    void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) const {
         // get idx, where winning have to be increased
         size_t winIdx = points[player.player] + 1; // normal points (shifted with one)
         for (uint8 p = 0; p < 4; ++p) {
@@ -216,9 +222,7 @@ public:
 
     //! Execute a search on the current state for the player, return the cards to play
     uint8 execute(const Hearts& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
-        std::vector<NodePtr> policy_nodes;
         std::vector<NodePtr> catchup_nodes;
-        policy_nodes.reserve(52);
         catchup_nodes.reserve(52);
 
         // walk tree according to state
@@ -231,8 +235,10 @@ public:
             }
         }
 
+        #pragma omp parallel for
         for (unsigned int i = 0; i < policyIter; ++i) {
-            policy_nodes.clear();
+            std::vector<NodePtr> policy_nodes;
+            policy_nodes.reserve(52);
             // NOTE: copy of state is mandatory
             Hearts state(cstate);
             // selection and expansion
