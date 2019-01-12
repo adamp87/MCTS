@@ -1,13 +1,14 @@
 # Gameagent for Hearts
 
-Monte Carlo tree search based gameagent.
+Multithreaded Monte Carlo tree search based gameagent.
 
 * [Game rules](https://en.wikipedia.org/wiki/Hearts)
 * [Monte Carlo tree search](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search)
-* [Ford�Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
+* [Ford-Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
 
 Gameagent is written in C++.
-Only standard C is used, no external library is included.
+Only the standard library is used, no external library is included.
+Multithreading is implemented with the help of OpenMP, which is supported by recent compilers (GCC: “-fopenmp”, MSVC: “/openmp”).
 Source files contain inline documentation with doxygen syntax:
 
 * src/hearts.hpp - Game handling and logic
@@ -22,7 +23,7 @@ Python tools:
 
 # Discussion
 
-A game was simulated, where 3 random players play against one AI with 1e5 policy iterations and for each policy one rollout iteration.
+A game was simulated, where 3 random players play against one AI with 1e5 policy iterations and for each policy 1 rollout iteration.
 Figure 1 visualizes the game tree of the AI player.
 For easier interpretation, only the nodes with the selected cards for every player and the nodes where the AI has to decide between his cards are shown.
 
@@ -68,7 +69,7 @@ AI decides to put hearts 4, since hearts 5 was still not played.
 First hearts 6, then clubs 9 must be played.
 + Note: swapping of three cards at the beginning is not implemented
 
-![F2](doc/probQueen.png "Figure 2: Probability of the final result, for spades 2 and spades queen.")
+![F2](doc/probQueen.png "Figure 2: Probability of final points, for spades 2 and spades Queen.")
 
 In a win/lose type of game, the evaluation of nodes is done by the count of wins.
 Since hearts is not a win/lose, but a point-evasion game, normalized probabilities for getting a number of points are computed, which can be seen in Figure 3.
@@ -76,4 +77,10 @@ These probability values are weighted and summed to get a value for node evaluat
 Note: M+ means AI Shot the Moon, M- means opponent Shot the Moon.
 
 ![F3](doc/prob.png "Figure 3: Probability of the final result from round 1 to 7.")
+
+To test the strength of the AI, several games were executed and a histogram of received points was stored.
+The executed games had 3 random players and one AI with 2e5 policy and 1 rollout iteration.
+Figure 4 visualizes the histogram and shows that the AI received 3 times more zero points.
+
+![F4](doc/points.png "Figure 4: Histogram of final points after 1792 games.")
 
