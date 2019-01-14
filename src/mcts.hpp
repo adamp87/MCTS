@@ -234,7 +234,7 @@ public:
         }
 
         #pragma omp parallel for
-        for (unsigned int i = 0; i < policyIter; ++i) {
+        for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             std::vector<NodePtr> policy_nodes;
             policy_nodes.reserve(52);
             // NOTE: copy of state is mandatory
