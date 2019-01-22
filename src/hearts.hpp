@@ -301,7 +301,8 @@ public:
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
-        std::fill(points, points + 4, 0);
+        for (int i = 0; i < 4; ++i)
+            points[i] = 0;
         for (uint8 round = 0; round < 13; ++round) {
             uint8 point = 0;
             uint8 playerToTake = getPlayerToTakeCards(round);

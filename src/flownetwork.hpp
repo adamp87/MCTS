@@ -33,9 +33,9 @@ class Hearts;
 class FlowNetwork {
     static constexpr uint8 node_s = 0;
     static constexpr uint8 node_t = 9;
-    static constexpr uint8 node_cA[4] = { 1, 2, 3, 4 };
-    static constexpr uint8 node_pA[4] = { 5, 6, 7, 8 };
     static constexpr uint8 nodeCount = 10;
+    CUDA_CALLABLE_MEMBER static constexpr uint8 node_cA(int i) { return i+1; } // 1, 2, 3, 4
+    CUDA_CALLABLE_MEMBER static constexpr uint8 node_pA(int i) { return i+5; } // 5, 6, 7, 8
 
     typedef uint8 Graph[nodeCount * nodeCount];
 
@@ -118,10 +118,10 @@ class FlowNetwork {
         }
 
         // if not all source edges are saturaded, game would be invalid
-        return graph[getEdge(node_s, node_cA[0])] == 0
-            && graph[getEdge(node_s, node_cA[1])] == 0
-            && graph[getEdge(node_s, node_cA[2])] == 0
-            && graph[getEdge(node_s, node_cA[3])] == 0;
+        return graph[getEdge(node_s, node_cA(0))] == 0
+            && graph[getEdge(node_s, node_cA(1))] == 0
+            && graph[getEdge(node_s, node_cA(2))] == 0
+            && graph[getEdge(node_s, node_cA(3))] == 0;
     }
 
 public:
@@ -132,7 +132,7 @@ public:
     //! Verify if game becomes invalid by assuming that a player has no card of the given color
     CUDA_CALLABLE_MEMBER bool verifyOneColor(uint8 player, uint8 color) const {
         FlowNetwork copy(*this);
-        copy.graph[getEdge(node_cA[color], node_pA[player])] = 0; // deactivate edge
+        copy.graph[getEdge(node_cA(color), node_pA(player))] = 0; // deactivate edge
 
         return copy._verify();
     }
@@ -140,12 +140,12 @@ public:
     //! Verify if game becomes invalid by assuming that a player playes one card from a given color
     CUDA_CALLABLE_MEMBER bool verifyOneCard(uint8 player, uint8 color) const {
         FlowNetwork copy(*this);
-        if (graph[getEdge(node_pA[player], node_t)] == 0) //TODO:should not happen (keep this?)
+        if (graph[getEdge(node_pA(player), node_t)] == 0) //TODO:should not happen (keep this?)
             return false;
-        if (graph[getEdge(node_s, node_cA[color])] == 0)
+        if (graph[getEdge(node_s, node_cA(color))] == 0)
             return false; // all unknown cards of this color have been played
-        copy.graph[getEdge(node_s, node_cA[color])] -= 1; // decrement unknow cards for color
-        copy.graph[getEdge(node_pA[player], node_t)] -= 1; // decrement unknow cards for player
+        copy.graph[getEdge(node_s, node_cA(color))] -= 1; // decrement unknow cards for color
+        copy.graph[getEdge(node_pA(player), node_t)] -= 1; // decrement unknow cards for player
 
         return copy._verify();
     }
@@ -154,7 +154,7 @@ public:
     CUDA_CALLABLE_MEMBER bool verifyHeart(uint8 player) const {
         FlowNetwork copy(*this);
         for (uint8 i = 0; i < 3; ++i)
-            copy.graph[getEdge(node_cA[i], node_pA[player])] = 0; // deactivate all edges, except heart
+            copy.graph[getEdge(node_cA(i), node_pA(player))] = 0; // deactivate all edges, except heart
 
         return copy._verify();
     }
