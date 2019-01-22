@@ -7,6 +7,7 @@
 
 #include "defs.hpp"
 #include "mcts.hpp"
+#include "mcts.cuh"
 #include "mctree.hpp"
 #include "hearts.hpp"
 
@@ -50,8 +51,8 @@ int main(int argc, char** argv) {
     int writeTree = 0;
     std::string workDir = "";
     unsigned int seed = getSeed();
-    unsigned int policyIter[4] = {100, 1000, 10000, 100000};
-    unsigned int rolloutIter[4] = {1, 1, 1, 1};
+    unsigned int policyIter[4] = {100, 1000, 10000, 1000};
+    unsigned int rolloutIter[4] = {1, 1, 1, 1 << 11};
 
     if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
         std::cout << "Paramaters:" << std::endl;
@@ -117,6 +118,14 @@ int main(int argc, char** argv) {
     std::array<MCTS<TreeContainer>, 4> ai;
     Hearts state(players);
 
+    // int cuda rollout
+    std::unique_ptr<RolloutCUDA> rolloutCuda(new RolloutCUDA(rolloutIter, seed));
+    if (rolloutCuda->hasGPU()) {
+        std::cout << "GPU Mode" << std::endl;
+    } else {
+        std::cout << "CPU Mode" << std::endl;
+    }
+
     // cheat, play with open cards
     for (uint8 p = 0; p < 4; ++p) {
         for (uint8 color = 0; color < 4; ++color) {
@@ -150,7 +159,7 @@ int main(int argc, char** argv) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
             uint8 player = state.getPlayer(round * 4 + turn);
-            uint8 card = ai[player].execute(state, players[player], policyIter[player], rolloutIter[player]);
+            uint8 card = ai[player].execute(state, players[player], policyIter[player], rolloutIter[player], rolloutCuda.get());
             state.update(card);
 
             std::cout << "P" << int(player) << " ";

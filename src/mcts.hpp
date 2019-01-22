@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "defs.hpp"
+#include "mcts.cuh"
 #include "hearts.hpp"
 
 bool debug_invalidState(uint8 nCards) {
@@ -219,7 +220,12 @@ public:
     MCTS() { }
 
     //! Execute a search on the current state for the player, return the cards to play
-    uint8 execute(const Hearts& cstate, const Hearts::Player& player, unsigned int policyIter, unsigned int rolloutIter) {
+    uint8 execute(const Hearts& cstate,
+                  const Hearts::Player& player,
+                  unsigned int policyIter,
+                  unsigned int rolloutIter,
+                  RolloutCUDA* rollloutCuda)
+    {
         std::vector<NodePtr> catchup_nodes;
         catchup_nodes.reserve(52);
 
@@ -233,23 +239,30 @@ public:
             }
         }
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic, 16)
         for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             std::vector<NodePtr> policy_nodes;
+            std::vector<uint8> points(4);
             policy_nodes.reserve(52);
             // NOTE: copy of state is mandatory
             Hearts state(cstate);
             // selection and expansion
             NodePtr node = policy(subroot, state, player, policy_nodes);
-            // rollout
-            for (unsigned int j = 0; j < rolloutIter; ++j) {
-                Hearts rstate(state);
-                rollout(rstate, player);
-                // backprop
-                uint8 points[4];
-                rstate.computePoints(points);
-                backprop(policy_nodes, player, points);
-                //backprop(catchup_nodes, player, points);
+            if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
+                rollloutCuda->cuRollout(state, player, rolloutIter, points))
+            { // rollout on gpu (if has gpu, is requested and gpu is free)
+                for (unsigned int j = 0; j < rolloutIter; ++j) {
+                    backprop(policy_nodes, player, points.data() + j * 4);
+                }
+            } else { // rollout on cpu (fallback)
+                for (unsigned int j = 0; j < rolloutIter; ++j) {
+                    Hearts rstate(state);
+                    rollout(rstate, player);
+                    // backprop
+                    rstate.computePoints(points.data());
+                    backprop(policy_nodes, player, points.data());
+                    //backprop(catchup_nodes, player, points.data());
+                }
             }
         }
         return selectBestByValue(subroot);
