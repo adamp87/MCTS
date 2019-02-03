@@ -24,6 +24,9 @@
  *          It can find cards for both opponent and for itself.
  *          Other functionalities are helping to simulate a game and to get the number of points at the end of the game.
  *          The rules of the game are described in Wikipedia under "Hearts (Card Game)".
+ *
+ *          The game Hearts does not a have a single win/lose outcome, it has a range of points that need to be avoided.
+ *          To get a win value for MCTreeNode evaluation, the win value is between 0 and 1.
  * \author adamp87
 */
 class Hearts {
@@ -70,6 +73,24 @@ private:
             }
         }
         return player;
+    }
+
+    //! Compute points for each player
+    CUDA_CALLABLE_MEMBER void computePoints(uint8* points) const {
+        const uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+
+        for (uint8 round = 0; round < 13; ++round) {
+            uint8 point = 0;
+            uint8 playerToTake = getPlayerToTakeCards(round);
+            for (uint8 turn = 0; turn < 4; ++turn) {
+                uint8 card = orderInTime[round * 4 + turn];
+                point += value_map[card]; // add points
+            }
+            points[playerToTake] += point;
+        }
     }
 
 public:
@@ -291,27 +312,35 @@ public:
 
     //! Compute points for each player
     void computePoints(std::array<uint8, 4>& points) const {
+        points.fill(0);
         computePoints(points.data());
     }
 
-    //! Compute points for each player
-    CUDA_CALLABLE_MEMBER void computePoints(uint8* points) const {
-        const uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    //! Compute win value for MCTreeSearch, between 0-1
+    CUDA_CALLABLE_MEMBER double computeMCTSWin(uint8 player) const {
+        //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
+        const double weight[28] = { // normalize win -> value between 1..0
+          1.        , 0.94248003, 0.88705146, 0.83363825, 0.78216712,
+          0.73256745, 0.68477121, 0.63871282, 0.59432909, 0.55155914,
+          0.51034428, 0.47062797, 0.43235573, 0.39547506, 0.35993534,
+          0.32568784, 0.29268556, 0.26088323, 0.23023722, 0.20070548,
+          0.1722475 , 0.14482425, 0.11839809, 0.09293277, 0.06839336,
+          0.04474619, 0.02195883, 0.        };
 
-        for (int i = 0; i < 4; ++i)
-            points[i] = 0;
-        for (uint8 round = 0; round < 13; ++round) {
-            uint8 point = 0;
-            uint8 playerToTake = getPlayerToTakeCards(round);
-            for (uint8 turn = 0; turn < 4; ++turn) {
-                uint8 card = orderInTime[round * 4 + turn];
-                point += value_map[card]; // add points
+        uint8 points[4] = {0};
+        computePoints(points);
+
+        size_t winIdx = points[player] + 1; // normal points (shifted with one)
+        for (uint8 p = 0; p < 4; ++p) {
+            if (points[p] == 26) {
+                if (p == player)
+                    winIdx = 0; // current ai shot the moon
+                else
+                    winIdx = 27; // other ai shot the moon
             }
-            points[playerToTake] += point;
         }
+
+        return weight[winIdx];
     }
 };
 

@@ -17,7 +17,7 @@
 struct RolloutCUDA::impl {
     Hearts* u_state;
     Hearts::Player* u_player;
-    uint8* u_result; //players(4)*maxrollout
+    double* u_result; //maxrollout
     curandState* d_rnd;
 
     std::mutex lock;
@@ -27,7 +27,7 @@ struct RolloutCUDA::impl {
 __global__ void rollout(const Hearts* u_state,
                         const Hearts::Player* u_player,
                         curandState* d_rnd,
-                        uint8* u_result) {
+                        double* u_result) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     uint8 cards[52];
@@ -46,7 +46,7 @@ __global__ void rollout(const Hearts* u_state,
     // Copy state back to global memory
     d_rnd[idx] = localRnd;
 
-    state.computePoints(u_result + 4 * idx);
+    u_result[idx] = state.computeMCTSWin(player.player);
 }
 
 __global__ void setup_random(curandState* state, unsigned int seed) {
@@ -99,7 +99,7 @@ RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
         std::cout << "Failed to allocate random" << std::endl;
         return;
     }
-    if(cudaMallocManaged(&ptr->u_result, sizeof(uint8) * 4 * maxIterations) != cudaSuccess) {
+    if(cudaMallocManaged(&ptr->u_result, sizeof(double) * maxIterations) != cudaSuccess) {
         std::cout << "Failed to allocate results" << std::endl;
         return;
     }
@@ -127,7 +127,7 @@ RolloutCUDA::~RolloutCUDA() {
 __host__ bool RolloutCUDA::cuRollout(const Hearts& state,
                                      const Hearts::Player& player,
                                      unsigned int iterations,
-                                     std::vector<uint8>& points) const {
+                                     double& winSum) const {
     std::unique_lock<std::mutex> lock(pimpl->lock, std::defer_lock);
     if (lock.try_lock() == false)
         return false;
@@ -144,7 +144,7 @@ __host__ bool RolloutCUDA::cuRollout(const Hearts& state,
         return false;
     }
 
-    points.clear();
-    points.insert(points.end(), pimpl->u_result, pimpl->u_result + 4 * iterations);
+    winSum = 0;
+    std::accumulate(pimpl->u_result, pimpl->u_result + iterations, 0.0);
     return true;
 }

@@ -10,38 +10,57 @@
 #include "defs.hpp"
 
 //! Base class for all Tree::Node implementations
-template <typename T_Card = uint8, typename T_Count = std::uint_fast32_t>
+template <typename T_Card = uint8>
 struct MCTSNodeBase {
-    typedef T_Count CountType;
+    typedef std::uint_fast32_t CountType;
 
     //! Dummy LockGuard, helps to keep policy transparent
     class LockGuard {
     public:
-        LockGuard(MCTSNodeBase<T_Card, T_Count>&) {}
+        LockGuard(MCTSNodeBase<T_Card>&) {}
     };
 
-    T_Card card; //!< card played out
-    CountType visits; //!< node visit count
-    CountType wins[28]; //!< number of wins for each points
+    T_Card      card;   //!< card played out
+    CountType   visits; //!< node visit count
+    double      wins;   //!< number of wins
 };
 
 //! Base class for multithreaded MCTreeDynamic::Node
-template <typename T_Card = uint8, typename T_Count = std::uint_fast32_t>
+template <typename T_Card = uint8>
 struct MCTSNodeBaseMT {
-    typedef T_Count CountType;
+    typedef std::uint_fast32_t CountType;
 
     //! LockGuard inherited from std, constructor takes node
     class LockGuard : public std::lock_guard<std::mutex> {
     public:
-        LockGuard(MCTSNodeBaseMT<T_Card, T_Count>& node)
+        LockGuard(MCTSNodeBaseMT<T_Card>& node)
             : std::lock_guard<std::mutex>(node.lock)
         {}
     };
 
-    T_Card card; //!< card played out
-    std::mutex lock; //!< mutex for thread-safe policy
-    std::atomic<CountType> visits; //!< node visit count
-    std::atomic<CountType> wins[28]; //!< number of wins for each points
+    class MyAtomicDouble {
+        // std::atomic<double> will be in standard c20
+        double value;
+        std::mutex lock;
+
+    public:
+        operator double() const {
+            return value;
+        }
+        void operator=(double val) {
+            std::lock_guard<std::mutex> guard(lock); (void)guard;
+            value = val;
+        }
+        double operator+=(double& val) {
+            std::lock_guard<std::mutex> guard(lock); (void)guard;
+            value += val;
+        }
+    };
+
+    T_Card                  card;   //!< card played out
+    std::mutex              lock;   //!< mutex for thread-safe policy
+    std::atomic<CountType>  visits; //!< node visit count
+    MyAtomicDouble          wins;   //!< number of wins for each points
 };
 
 //! Data container, store nodes detached, store childs as pointers
@@ -100,19 +119,16 @@ public:
         root.reset(new Node());
         root->card = 255;
         root->visits = 1;
-        for (uint8 i = 0; i < 28; ++i)
-            root->wins[i] = 0;
+        root->wins = 0;
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, uint8 card) {
+    NodePtr addNode(NodePtr& _parent, uint8 card) const {
         // init leaf node
         std::unique_ptr<Node> child(new Node());
         child->visits = 1;
         child->card = card;
-        for (uint8 i = 0; i < 28; ++i) {
-            child->wins[i] = 0;
-        }
+        child->wins = 0;
 
         _parent->childs.push_back(std::move(child));
         return _parent->childs.back().get();
@@ -216,8 +232,7 @@ public:
         Node root;
         root.card = 255;
         root.visits = 1;
-        for (uint8 i = 0; i < 28; ++i)
-            root.wins[i] = 0;
+        root.wins = 0;
         for (uint8 i = 0; i < 39; ++i) {
             root.childs[i] = 0;
         }
@@ -230,11 +245,9 @@ public:
         Node child;
         child.visits = 1;
         child.card = card;
+        child.wins = 0;
         for (uint8 i = 0; i < 39; ++i) {
             child.childs[i] = 0;
-        }
-        for (uint8 i = 0; i < 28; ++i) {
-            child.wins[i] = 0;
         }
 
         // find next free idx of parent to put child
@@ -354,12 +367,11 @@ public:
     //! Construct tree, interface
     MCTreeStaticList() {
         Node root;
+        root.wins = 0;
         root.card = 255;
         root.visits = 1;
         root.child_head = 0;
         root.parent_next = 0;
-        for (uint8 i = 0; i < 28; ++i)
-            root.wins[i] = 0;
         nodes.push_back(root);
     }
 
@@ -367,13 +379,11 @@ public:
     NodePtr addNode(NodePtr& _parent, uint8 card) {
         // init leaf node
         Node child;
+        child.wins = 0;
         child.visits = 1;
         child.card = card;
         child.child_head = 0;
         child.parent_next = 0;
-        for (uint8 i = 0; i < 28; ++i) {
-            child.wins[i] = 0;
-        }
 
         Node& parent = *_parent;
         if (parent.child_head == 0) { // first child

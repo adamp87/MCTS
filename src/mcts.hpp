@@ -27,10 +27,7 @@ bool debug_invalidState(uint8 nCards) {
  * \details This class implements Monte Carlo tree search as described in Wikipedia.
  *          It follows the policy-rollout-backprop idea.
  *          Before policy, it walks the tree according to the current state of the game, this is called catchup.
- *          The game Hearts does not a have a single win/lose outcome, it has a range of points that need to be avoided.
- *          To get a win value for node evaluation, the number wins/visits are normalized and summed.
- *          This mechanism is implemented in this class.
- *          To have a generic tree search class, this should de detached in the future.
+ *          To have a generic implementation, the win value for each iteration is a floating point value between 0 and 1.
  *
  *          The underlying data container is transparent for this class.
  *          A container must support the template interface required by the tree search.
@@ -74,7 +71,7 @@ private:
     }
 
     //! Applies the policy step of the Tree Search
-    NodePtr policy(NodePtr subRoot, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
+    NodePtr policy(const NodePtr subRoot, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
         NodePtr node = subRoot;
         visited_nodes.push_back(node); // store subroot as policy
@@ -144,43 +141,20 @@ private:
     }
 
     //! Applies the backprop step of the Tree Search
-    void backprop(std::vector<NodePtr>& visited_nodes, const Hearts::Player& player, uint8* points) const {
-        // get idx, where winning have to be increased
-        size_t winIdx = points[player.player] + 1; // normal points (shifted with one)
-        for (uint8 p = 0; p < 4; ++p) {
-            if (points[p] == 26) {
-                if (p == player.player)
-                    winIdx = 0; // current ai shot the moon
-                else
-                    winIdx = 27; // other ai shot the moon
-            }
-        }
-
+    void backprop(std::vector<NodePtr>& visited_nodes, double win, CountType vis = 1) const {
         // backprop results to visited nodes
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
-            node.visits += 1;
-            node.wins[winIdx] += 1;
+            node.visits += vis;
+            node.wins += win;
         }
     }
 
     //! Returns the value of a node for tree search evaluation
     double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent, double c = 2.0) const {
-        //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
-        const double weight[28] = { // normalize win -> value between 1..0
-          1.        , 0.94248003, 0.88705146, 0.83363825, 0.78216712,
-          0.73256745, 0.68477121, 0.63871282, 0.59432909, 0.55155914,
-          0.51034428, 0.47062797, 0.43235573, 0.39547506, 0.35993534,
-          0.32568784, 0.29268556, 0.26088323, 0.23023722, 0.20070548,
-          0.1722475 , 0.14482425, 0.11839809, 0.09293277, 0.06839336,
-          0.04474619, 0.02195883, 0.        };
-
-        double q = 0.0;
         const Node& node = *_node;
+        double q = node.wins;
         double n = static_cast<double>(node.visits);
-        for (uint8 i = 0; i < 28; ++i) {
-            q += weight[i] * node.wins[i];
-        }
 
         if (isOpponent)
             q = n-q; // opponent is trying to maximalize points
@@ -246,26 +220,24 @@ public:
         #pragma omp parallel for schedule(dynamic, 16)
         for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             std::vector<NodePtr> policy_nodes;
-            std::vector<uint8> points(4);
             policy_nodes.reserve(52);
+            double wins = 0;
             // NOTE: copy of state is mandatory
             Hearts state(cstate);
             // selection and expansion
             NodePtr node = policy(subroot, state, player, policy_nodes);
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                rollloutCuda->cuRollout(state, player, rolloutIter, points))
+                rollloutCuda->cuRollout(state, player, rolloutIter, wins))
             { // rollout on gpu (if has gpu, is requested and gpu is free)
-                for (unsigned int j = 0; j < rolloutIter; ++j) {
-                    backprop(policy_nodes, player, points.data() + j * 4);
-                }
+                backprop(policy_nodes, wins, rolloutIter);
             } else { // rollout on cpu (fallback)
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
                     Hearts rstate(state);
                     rollout(rstate, player);
                     // backprop
-                    rstate.computePoints(points.data());
-                    backprop(policy_nodes, player, points.data());
-                    //backprop(catchup_nodes, player, points.data());
+                    wins = rstate.computeMCTSWin(player.player);
+                    backprop(policy_nodes, wins);
+                    //backprop(catchup_nodes, wins);
                 }
             }
         }
@@ -282,9 +254,7 @@ public:
         stream << ";" << (int)opponent;
         stream << ";" << "0"; // not selected
         stream << ";" << next->visits / maxIter;
-        for (uint8 i = 0; i < 28; ++i) {
-            stream << ";" << next->wins[i] / (float)next->visits;
-        }
+        stream << ";" << next->wins / (float)next->visits;
         stream << std::endl;
 
         auto it = TTree::getChildIterator(next);
@@ -296,9 +266,7 @@ public:
 
     template <typename T>
     void writeResults(const Hearts& state, uint8 playerID, float maxIter, T& stream) {
-        stream << "Branch;ID;ParentID;Round;Card;Opponent;Select;Conf;PM";
-        for (int i = 0; i < 27; ++i)
-            stream << ";P" << i;
+        stream << "Branch;ID;ParentID;Round;Card;Opponent;Select;Visit;Win";
         stream << std::endl;
 
         uint8 round = 0;
@@ -324,9 +292,7 @@ public:
                     stream << ";" << (int)opponent;
                     stream << ";" << "1"; // selected
                     stream << ";" << next->visits / maxIter;
-                    for (uint8 i = 0; i < 28; ++i) {
-                        stream << ";" << next->wins[i] / (float)next->visits;
-                    }
+                    stream << ";" << next->wins / (float)next->visits;
                     stream << std::endl;
 
                 } else { // not selected nodes

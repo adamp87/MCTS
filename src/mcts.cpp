@@ -12,6 +12,6 @@ RolloutCUDA::~RolloutCUDA() {
 bool RolloutCUDA::cuRollout(const Hearts&,
                             const Hearts::Player&,
                             unsigned int,
-                            std::vector<uint8>&) const {
+                            double&) const {
     return false; // should not be called
 }

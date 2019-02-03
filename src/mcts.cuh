@@ -21,7 +21,7 @@ public:
     bool cuRollout(const Hearts& state,
                    const Hearts::Player& ai,
                    unsigned int iteration,
-                   std::vector<uint8>& points) const;
+                   double& winSum) const;
 };
 
 #endif // MCTS_CUH
