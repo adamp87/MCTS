@@ -79,6 +79,10 @@ RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
             maxIterations = iterations[i];
         }
     }
+    if (maxIterations == 1) {
+        std::cout << "CUDA was not requested, enable with e.g. (r3 2048)" << std::endl;
+        return;
+    }
 
     std::unique_ptr<RolloutCUDA::impl> ptr(new RolloutCUDA::impl());
     dim3 threads(RolloutCUDA::impl::nThread);

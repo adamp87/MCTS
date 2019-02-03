@@ -51,8 +51,8 @@ int main(int argc, char** argv) {
     int writeTree = 0;
     std::string workDir = "";
     unsigned int seed = getSeed();
-    unsigned int policyIter[4] = {100, 1000, 10000, 1000};
-    unsigned int rolloutIter[4] = {1, 1, 1, 1 << 11};
+    unsigned int policyIter[4] = {100, 1000, 10000, 100000};
+    unsigned int rolloutIter[4] = {1, 1, 1, 1};
 
     if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
         std::cout << "Paramaters:" << std::endl;
