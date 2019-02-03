@@ -114,9 +114,8 @@ int main(int argc, char** argv) {
 
     // init program
     std::srand(seed);
-    std::array<Hearts::Player, 4> players;
+    Hearts state(cheat != 0);
     std::array<MCTS<TreeContainer>, 4> ai;
-    Hearts state(players);
 
     // int cuda rollout
     std::unique_ptr<RolloutCUDA> rolloutCuda(new RolloutCUDA(rolloutIter, seed));
@@ -126,27 +125,13 @@ int main(int argc, char** argv) {
         std::cout << "CPU Mode" << std::endl;
     }
 
-    // cheat, play with open cards
-    for (uint8 p = 0; p < 4; ++p) {
-        for (uint8 color = 0; color < 4; ++color) {
-            for (uint8 value = 0; value < 13; ++value) {
-                uint8 card = 13 * color + value;
-                for (uint8 p2 = 0; p2 < 4; ++p2) {
-                    if (cheat != 0 && players[p2].hand[card] == p2) {
-                        players[p].hand[card] = p2; // player see cards of other players
-                    }
-                }
-            }
-        }
-    }
-
     // print player cards
     for (uint8 p = 0; p < 4; ++p) {
         std::cout << "P" << int(p) << " ";
         for (uint8 color = 0; color < 4; ++color) {
             for (uint8 value = 0; value < 13; ++value) {
                 uint8 card = 13 * color + value;
-                if (players[p].hand[card] == p) {
+                if (state.isCardAtPlayer(p, card)) {
                     std::cout << formatCard(card) << " ";
                 }
             }
@@ -159,7 +144,7 @@ int main(int argc, char** argv) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
             uint8 player = state.getPlayer(round * 4 + turn);
-            uint8 card = ai[player].execute(state, players[player], policyIter[player], rolloutIter[player], rolloutCuda.get());
+            uint8 card = ai[player].execute(player, state, policyIter[player], rolloutIter[player], rolloutCuda.get());
             state.update(card);
 
             std::cout << "P" << int(player) << " ";

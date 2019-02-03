@@ -6,6 +6,11 @@
 #include "defs.hpp"
 #include "hearts.hpp"
 
+//! Execute multiple rollout on CUDA
+/*!
+ * \details TODO
+ * \author adamp87
+*/
 class RolloutCUDA {
     struct impl;
     impl* pimpl;
@@ -18,8 +23,9 @@ public:
         return pimpl != 0;
     }
 
-    bool cuRollout(const Hearts& state,
-                   const Hearts::Player& ai,
+    //! TODO
+    bool cuRollout(const uint8 idxAi,
+                   const Hearts& state,
                    unsigned int iteration,
                    double& winSum) const;
 };

@@ -71,13 +71,13 @@ private:
     }
 
     //! Applies the policy step of the Tree Search
-    NodePtr policy(const NodePtr subRoot, Hearts& state, const Hearts::Player& player, std::vector<NodePtr>& visited_nodes) {
+    NodePtr policy(const NodePtr subRoot, Hearts& state, uint8 idxAi, std::vector<NodePtr>& visited_nodes) {
         uint8 cards[52];
         NodePtr node = subRoot;
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isGameOver()) {
             // get cards
-            uint8 nCards = state.getPossibleCards(player, cards);
+            uint8 nCards = state.getPossibleCards(idxAi, cards);
             if (debug_invalidState(nCards))
                 return node; // invalid state, rollout will return false, increasing visit count
 
@@ -115,7 +115,7 @@ private:
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                double val = value(child, subRootVisitLog, player.player != state.getPlayer());
+                double val = value(child, subRootVisitLog, idxAi != state.getPlayer());
                 if (best_val < val) {
                     best = child;
                     best_val = val;
@@ -129,10 +129,10 @@ private:
     }
 
     //! Applies the rollout step of the Tree Search
-    bool rollout(Hearts& state, const Hearts::Player& player) const {
+    bool rollout(Hearts& state, uint8 idxAi) const {
         uint8 cards[52];
         while (!state.isGameOver()) {
-            uint8 nCards = state.getPossibleCards(player, cards);
+            uint8 nCards = state.getPossibleCards(idxAi, cards);
             debug_invalidState(nCards);
             uint8 pick = static_cast<uint8>(rand() % nCards);
             state.update(cards[pick]);
@@ -198,8 +198,8 @@ public:
     MCTS() { }
 
     //! Execute a search on the current state for the player, return the cards to play
-    uint8 execute(const Hearts& cstate,
-                  const Hearts::Player& player,
+    uint8 execute(const uint8 idxAi,
+                  const Hearts& cstate,
                   unsigned int policyIter,
                   unsigned int rolloutIter,
                   RolloutCUDA* rollloutCuda)
@@ -211,7 +211,7 @@ public:
         NodePtr subroot = catchup(cstate, catchup_nodes);
         { // only one choice, dont think
             uint8 cards[52];
-            uint8 nCards = cstate.getPossibleCards(player, cards);
+            uint8 nCards = cstate.getPossibleCards(idxAi, cards);
             if (nCards == 1) {
                 return cards[0];
             }
@@ -225,17 +225,17 @@ public:
             // NOTE: copy of state is mandatory
             Hearts state(cstate);
             // selection and expansion
-            NodePtr node = policy(subroot, state, player, policy_nodes);
+            NodePtr node = policy(subroot, state, idxAi, policy_nodes);
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                rollloutCuda->cuRollout(state, player, rolloutIter, wins))
+                rollloutCuda->cuRollout(idxAi, state, rolloutIter, wins))
             { // rollout on gpu (if has gpu, is requested and gpu is free)
                 backprop(policy_nodes, wins, rolloutIter);
             } else { // rollout on cpu (fallback)
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
                     Hearts rstate(state);
-                    rollout(rstate, player);
+                    rollout(rstate, idxAi);
                     // backprop
-                    wins = rstate.computeMCTSWin(player.player);
+                    wins = rstate.computeMCTSWin(idxAi);
                     backprop(policy_nodes, wins);
                     //backprop(catchup_nodes, wins);
                 }
@@ -265,7 +265,7 @@ public:
     }
 
     template <typename T>
-    void writeResults(const Hearts& state, uint8 playerID, float maxIter, T& stream) {
+    void writeResults(const Hearts& state, uint8 idxAi, float maxIter, T& stream) {
         stream << "Branch;ID;ParentID;Round;Card;Opponent;Select;Visit;Win";
         stream << std::endl;
 
@@ -275,7 +275,7 @@ public:
         for (uint8 time = 0; time < 52; ++time) {
             round = time / 4;
             uint8 card = state.getCardAtTime(time);
-            uint8 opponent = state.getPlayer(time) != playerID ? 1 : 0;
+            uint8 opponent = state.getPlayer(time) != idxAi ? 1 : 0;
 
             auto it = TTree::getChildIterator(parent);
             while (it.hasNext()) {

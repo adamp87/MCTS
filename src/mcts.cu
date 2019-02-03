@@ -16,7 +16,6 @@
 
 struct RolloutCUDA::impl {
     Hearts* u_state;
-    Hearts::Player* u_player;
     double* u_result; //maxrollout
     curandState* d_rnd;
 
@@ -24,21 +23,20 @@ struct RolloutCUDA::impl {
     constexpr static int nThread = 32;
 };
 
-__global__ void rollout(const Hearts* u_state,
-                        const Hearts::Player* u_player,
+__global__ void rollout(const uint8 idxAi,
+                        const Hearts* u_state,
                         curandState* d_rnd,
                         double* u_result) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     uint8 cards[52];
     Hearts state(*u_state);
-    Hearts::Player player(*u_player);
 
     // Copy state to local memory for efficiency
     curandState localRnd = d_rnd[idx];
 
     while (!state.isGameOver()) {
-        uint8 count = state.getPossibleCards(player, cards);
+        uint8 count = state.getPossibleCards(idxAi, cards);
         uint8 pick = curand(&localRnd) % count;
         state.update(cards[pick]);
     }
@@ -46,7 +44,7 @@ __global__ void rollout(const Hearts* u_state,
     // Copy state back to global memory
     d_rnd[idx] = localRnd;
 
-    u_result[idx] = state.computeMCTSWin(player.player);
+    u_result[idx] = state.computeMCTSWin(idxAi);
 }
 
 __global__ void setup_random(curandState* state, unsigned int seed) {
@@ -91,10 +89,6 @@ RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
         std::cout << "Failed to allocate state" << std::endl;
         return;
     }
-    if(cudaMallocManaged(&ptr->u_player, sizeof(Hearts::Player)) != cudaSuccess) {
-        std::cout << "Failed to allocate player" << std::endl;
-        return;
-    }
     if(cudaMalloc(&ptr->d_rnd, sizeof(curandState) * maxIterations) != cudaSuccess) {
         std::cout << "Failed to allocate random" << std::endl;
         return;
@@ -118,14 +112,13 @@ RolloutCUDA::~RolloutCUDA() {
         return;
     cudaFree(pimpl->d_rnd);
     cudaFree(pimpl->u_state);
-    cudaFree(pimpl->u_player);
     cudaFree(pimpl->u_result);
     delete pimpl;
     pimpl = 0;
 }
 
-__host__ bool RolloutCUDA::cuRollout(const Hearts& state,
-                                     const Hearts::Player& player,
+__host__ bool RolloutCUDA::cuRollout(const uint8 idxAi,
+                                     const Hearts& state,
                                      unsigned int iterations,
                                      double& winSum) const {
     std::unique_lock<std::mutex> lock(pimpl->lock, std::defer_lock);
@@ -134,9 +127,8 @@ __host__ bool RolloutCUDA::cuRollout(const Hearts& state,
     dim3 threads(RolloutCUDA::impl::nThread);
     dim3 blocks(iterations / threads.x);
     *pimpl->u_state = state;
-    *pimpl->u_player = player;
-    rollout<<<blocks, threads>>>(pimpl->u_state,
-                                 pimpl->u_player,
+    rollout<<<blocks, threads>>>(idxAi,
+                                 pimpl->u_state,
                                  pimpl->d_rnd,
                                  pimpl->u_result);
     if(cudaDeviceSynchronize() != cudaSuccess) {

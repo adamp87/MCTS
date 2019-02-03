@@ -17,7 +17,7 @@
 #define CUDA_CALLABLE_MEMBER
 #endif
 
-//! Stores the state of the game that is known by all players
+//! Stores the state of the game that is known by all players and state of each player individually
 /*!
  * \details This class implements the function getPossibleCards for applying AI.
  *          This function returns those cards, which can be played in the next turn without breaking the rules.
@@ -30,19 +30,19 @@
  * \author adamp87
 */
 class Hearts {
-public:
+private:
     //! Stores the cards that only one player knows
     struct Player {
         uint8 player; //!< fixed player id
         uint8 hand[52]; //!< known cards: index card-value playerid; can store info after swap/open cards
     };
 
-private:
     uint8 turn; //!< current turn, one round has 4 turns
     uint8 round; //!< current round, one game has 13 rounds
     uint8 orderInTime[52]; //!< game state: index time-value card
     uint8 orderAtCard[52]; //!< game state: index card-value time
     uint8 orderPlayer[52]; //!< game state: index time-value player
+    Player players[4]; //!< hand of each player
 
     friend class FlowNetwork;
 
@@ -95,7 +95,7 @@ private:
 
 public:
     //! Shuffle deck and set initial state
-    Hearts(std::array<Player, 4>& players) {
+    Hearts(bool cheat) {
         turn = 0;
         round = 0;
         uint8 unset = Hearts::order_unset;
@@ -125,6 +125,22 @@ public:
 
         //TODO: discuss 'no bleeding on the first trick'
         //TODO: it is ok, but 12 hearts and SQ returns no cards
+
+        // cheat, play with open cards
+        for (uint8 p = 0; p < 4; ++p) {
+            if (!cheat)
+                continue;
+            for (uint8 color = 0; color < 4; ++color) {
+                for (uint8 value = 0; value < 13; ++value) {
+                    uint8 card = 13 * color + value;
+                    for (uint8 p2 = 0; p2 < 4; ++p2) {
+                        if (players[p2].hand[card] == p2) {
+                            players[p].hand[card] = p2; // player see cards of other players
+                        }
+                    }
+                }
+            }
+        }
     }
 
     uint8 getPlayer(uint8 time = 255) const {
@@ -146,8 +162,9 @@ public:
     }
 
     //! Implements game logic, return the possible cards that next player can play
-    CUDA_CALLABLE_MEMBER uint8 getPossibleCards(const Player& ai, uint8* cards) const {
+    CUDA_CALLABLE_MEMBER uint8 getPossibleCards(uint8 idxAi, uint8* cards) const {
         uint8 count = 0;
+        const Player& ai = players[idxAi];
         uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
         uint8 colorFirst = orderInTime[round * 4] / 13; //note, must check if not first run
 
@@ -244,7 +261,7 @@ public:
                 heartsBroken |= (nextColor == 3);
             }
 
-            FlowNetwork flow(*this, ai.player, ai.hand, hasNoColor);
+            FlowNetwork flow(*this, ai.player, hasNoColor);
 
             for (uint8 color = 0; color < 4; ++color) {
                 if (hasNoColor[player * 4 + color] == true)
@@ -317,7 +334,7 @@ public:
     }
 
     //! Compute win value for MCTreeSearch, between 0-1
-    CUDA_CALLABLE_MEMBER double computeMCTSWin(uint8 player) const {
+    CUDA_CALLABLE_MEMBER double computeMCTSWin(uint8 idxAi) const {
         //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
         const double weight[28] = { // normalize win -> value between 1..0
           1.        , 0.94248003, 0.88705146, 0.83363825, 0.78216712,
@@ -330,10 +347,10 @@ public:
         uint8 points[4] = {0};
         computePoints(points);
 
-        size_t winIdx = points[player] + 1; // normal points (shifted with one)
+        size_t winIdx = points[idxAi] + 1; // normal points (shifted with one)
         for (uint8 p = 0; p < 4; ++p) {
             if (points[p] == 26) {
-                if (p == player)
+                if (p == idxAi)
                     winIdx = 0; // current ai shot the moon
                 else
                     winIdx = 27; // other ai shot the moon
@@ -341,6 +358,10 @@ public:
         }
 
         return weight[winIdx];
+    }
+
+    bool isCardAtPlayer(uint8 idxAi, uint8 card) {
+        return players[idxAi].hand[card] == idxAi;
     }
 };
 

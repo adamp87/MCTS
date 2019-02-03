@@ -127,7 +127,7 @@ class FlowNetwork {
 public:
 
     //! Init graph as described in FlowNetwork documentation
-    CUDA_CALLABLE_MEMBER FlowNetwork(const Hearts& state, uint8 ai, const uint8* ai_hand, const bool* hasNoColor);
+    CUDA_CALLABLE_MEMBER FlowNetwork(const Hearts& state, uint8 idxAi, const bool* hasNoColor);
 
     //! Verify if game becomes invalid by assuming that a player has no card of the given color
     CUDA_CALLABLE_MEMBER bool verifyOneColor(uint8 player, uint8 color) const {

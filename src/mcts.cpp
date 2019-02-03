@@ -9,8 +9,8 @@ RolloutCUDA::~RolloutCUDA() {
     pimpl = 0;
 }
 
-bool RolloutCUDA::cuRollout(const Hearts&,
-                            const Hearts::Player&,
+bool RolloutCUDA::cuRollout(const uint8,
+                            const Hearts&,
                             unsigned int,
                             double&) const {
     return false; // should not be called
