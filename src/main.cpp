@@ -32,7 +32,7 @@ typedef MCTreeDynamic<MCTSNodeBaseMT<> > TreeContainer;
 static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeStaticArray TreeContainer;
+typedef MCTreeStaticArray<39> TreeContainer;
 #endif
 
 std::string formatCard(uint8 card) {

@@ -12,6 +12,7 @@
 //! Base class for all Tree::Node implementations
 template <typename T_Card = uint8>
 struct MCTSNodeBase {
+    typedef T_Card CardType;
     typedef std::uint_fast32_t CountType;
 
     //! Dummy LockGuard, helps to keep policy transparent
@@ -23,11 +24,16 @@ struct MCTSNodeBase {
     T_Card      card;   //!< card played out
     CountType   visits; //!< node visit count
     double      wins;   //!< number of wins
+
+    MCTSNodeBase(T_Card card)
+        : card(card), visits(1), wins(0.0)
+    { }
 };
 
 //! Base class for multithreaded MCTreeDynamic::Node
 template <typename T_Card = uint8>
 struct MCTSNodeBaseMT {
+    typedef T_Card CardType;
     typedef std::uint_fast32_t CountType;
 
     //! LockGuard inherited from std, constructor takes node
@@ -44,6 +50,7 @@ struct MCTSNodeBaseMT {
         std::mutex lock;
 
     public:
+        MyAtomicDouble() : value(0) {}
         operator double() const {
             return value;
         }
@@ -61,6 +68,10 @@ struct MCTSNodeBaseMT {
     std::mutex              lock;   //!< mutex for thread-safe policy
     std::atomic<CountType>  visits; //!< node visit count
     MyAtomicDouble          wins;   //!< number of wins for each points
+
+    MCTSNodeBaseMT(T_Card card)
+        : card(card), visits(1)
+    { }
 };
 
 //! Data container, store nodes detached, store childs as pointers
@@ -74,6 +85,8 @@ struct MCTSNodeBaseMT {
 template <typename T_NodeBase = MCTSNodeBase<> >
 class MCTreeDynamic {
 public:
+    typedef typename T_NodeBase::CardType CardType;
+
     //! One node with childs, interface
     class Node : public T_NodeBase {
     private:
@@ -82,7 +95,7 @@ public:
         friend class ChildIterator;
         friend class MCTreeDynamic;
 
-        Node() {}
+        Node(CardType card) : T_NodeBase(card) {}
         Node(const Node&) = delete;
     };
 
@@ -116,19 +129,13 @@ private:
 public:
     //! Construct tree, interface
     MCTreeDynamic() {
-        root.reset(new Node());
-        root->card = 255;
-        root->visits = 1;
-        root->wins = 0;
+        root.reset(new Node(255));
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, uint8 card) const {
+    NodePtr addNode(NodePtr& _parent, CardType card) const {
         // init leaf node
-        std::unique_ptr<Node> child(new Node());
-        child->visits = 1;
-        child->card = card;
-        child->wins = 0;
+        std::unique_ptr<Node> child(new Node(card));
 
         _parent->childs.push_back(std::move(child));
         return _parent->childs.back().get();
@@ -158,14 +165,19 @@ public:
  *          Each node stores the indices in fixed length array, bounded by 39.
  * \author adamp87
 */
+template <unsigned int N_MaxChild>
 class MCTreeStaticArray {
 public:
+    typedef typename MCTSNodeBase<>::CardType CardType;
+
     //! One node with childs, interface
     class Node : public MCTSNodeBase<> {
-        size_t childs[39]; //!< child indices as fixed length array
+        size_t childs[N_MaxChild]; //!< child indices as fixed length array
 
         friend class ChildIterator;
         friend class MCTreeStaticArray;
+
+        Node(CardType card) : MCTSNodeBase(card), childs{0} {}
     };
 
     //!< pointer to a node, interface
@@ -229,36 +241,24 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticArray() {
-        Node root;
-        root.card = 255;
-        root.visits = 1;
-        root.wins = 0;
-        for (uint8 i = 0; i < 39; ++i) {
-            root.childs[i] = 0;
-        }
+        Node root(255);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, uint8 card) {
+    NodePtr addNode(NodePtr& _parent, CardType card) {
         // init leaf node
-        Node child;
-        child.visits = 1;
-        child.card = card;
-        child.wins = 0;
-        for (uint8 i = 0; i < 39; ++i) {
-            child.childs[i] = 0;
-        }
+        Node child(card);
 
         // find next free idx of parent to put child
         uint8 idx = 0;
         Node& parent = *_parent;
-        for (; idx < 39; ++idx) {
+        for (; idx < N_MaxChild; ++idx) {
             if (parent.childs[idx] == 0) {
                 break;
             }
         }
-        if (idx == 39)
+        if (idx == N_MaxChild)
             std::cerr << "Error in child saving" << std::endl;
 
         // add leaf to vector and init space for childs
@@ -293,6 +293,8 @@ public:
  * \author adamp87
 */
 class MCTreeStaticList {
+    typedef typename MCTSNodeBase<>::CardType CardType;
+
 public:
     //! One node with childs, interface
     class Node : public MCTSNodeBase<> {
@@ -301,6 +303,8 @@ public:
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
+
+        Node(CardType card) : MCTSNodeBase(card), child_head(0), parent_next(0) {}
     };
 
     //!< pointer to a node, interface
@@ -366,25 +370,14 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticList() {
-        Node root;
-        root.wins = 0;
-        root.card = 255;
-        root.visits = 1;
-        root.child_head = 0;
-        root.parent_next = 0;
+        Node root(255);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, uint8 card) {
+    NodePtr addNode(NodePtr& _parent, CardType card) {
         // init leaf node
-        Node child;
-        child.wins = 0;
-        child.visits = 1;
-        child.card = card;
-        child.child_head = 0;
-        child.parent_next = 0;
-
+        Node child(card);
         Node& parent = *_parent;
         if (parent.child_head == 0) { // first child
             parent.child_head = nodes.size();
