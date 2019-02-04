@@ -1,8 +1,6 @@
 #ifndef MCTS_CUH
 #define MCTS_CUH
 
-#include "defs.hpp"
-
 //! Execute multiple rollout on CUDA
 /*!
  * \details TODO
@@ -22,7 +20,7 @@ public:
     }
 
     //! TODO
-    bool cuRollout(const uint8 idxAi,
+    bool cuRollout(int idxAi,
                    const TProblem& state,
                    unsigned int iteration,
                    double& winSum) const;

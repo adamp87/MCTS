@@ -150,7 +150,7 @@ public:
     }
 
     //! Interface
-    uint8 getPlayer(int time = 255) const {
+    int getPlayer(int time = 255) const {
         if (time == 255)
             time = round * 4 + turn;
         return orderPlayer[time];
@@ -172,7 +172,7 @@ public:
     }
 
     //! Interface, Implements game logic, return the possible cards that next player can play
-    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(uint8 idxAi, uint8* cards) const {
+    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(int idxAi, uint8* cards) const {
         uint8 count = 0;
         const Player& ai = players[idxAi];
         uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
@@ -347,7 +347,7 @@ public:
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
-    CUDA_CALLABLE_MEMBER double computeMCTSWin(uint8 idxAi) const {
+    CUDA_CALLABLE_MEMBER double computeMCTSWin(int idxAi) const {
         //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
         const double weight[28] = { // normalize win -> value between 1..0
           1.        , 0.94248003, 0.88705146, 0.83363825, 0.78216712,
@@ -379,7 +379,7 @@ public:
         computePoints(points.data());
     }
 
-    bool isCardAtPlayer(uint8 idxAi, uint8 card) {
+    bool isCardAtPlayer(int idxAi, uint8 card) {
         return players[idxAi].hand[card] == idxAi;
     }
 };

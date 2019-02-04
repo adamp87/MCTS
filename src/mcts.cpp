@@ -15,7 +15,7 @@ RolloutCUDA<TProblem>::~RolloutCUDA() {
 }
 
 template <typename TProblem>
-bool RolloutCUDA<TProblem>::cuRollout(const uint8,
+bool RolloutCUDA<TProblem>::cuRollout(int,
                                       const TProblem&,
                                       unsigned int,
                                       double&) const {

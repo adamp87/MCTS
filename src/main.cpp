@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     }
 
     // print player cards
-    for (uint8 p = 0; p < 4; ++p) {
+    for (int p = 0; p < 4; ++p) {
         std::cout << "P" << int(p) << " ";
         for (uint8 color = 0; color < 4; ++color) {
             for (uint8 value = 0; value < 13; ++value) {
@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
     for (uint8 round = 0; round < 13; ++round) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
-            uint8 player = state.getPlayer(round * 4 + turn);
+            int player = state.getPlayer(round * 4 + turn);
             uint8 card = ai[player].execute(player, state, policyIter[player], rolloutIter[player], rolloutCuda.get());
             state.update(card);
 

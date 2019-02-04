@@ -7,7 +7,6 @@
 #include <numeric>
 #include <algorithm>
 
-#include "defs.hpp"
 #include "mcts.cuh"
 
 //! Monte Carlo tree search to apply AI
@@ -61,7 +60,7 @@ private:
     }
 
     //! Applies the policy step of the Tree Search
-    NodePtr policy(const NodePtr subRoot, TProblem& state, uint8 idxAi, std::vector<NodePtr>& visited_nodes) {
+    NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = subRoot;
         MoveType moves[TProblem::MaxMoves];
         visited_nodes.push_back(node); // store subroot as policy
@@ -117,7 +116,7 @@ private:
     }
 
     //! Applies the rollout step of the Tree Search
-    bool rollout(TProblem& state, uint8 idxAi) const {
+    bool rollout(TProblem& state, int idxAi) const {
         MoveType moves[TProblem::MaxMoves];
         while (!state.isFinished()) {
             MoveCounterType nMoves = state.getPossibleMoves(idxAi, moves);
@@ -185,7 +184,7 @@ public:
     MCTS() { }
 
     //! Execute a search on the current state for the ai, return the move
-    MoveType execute(const uint8 idxAi,
+    MoveType execute(const int idxAi,
                      const TProblem& cstate,
                      unsigned int policyIter,
                      unsigned int rolloutIter,
@@ -258,7 +257,7 @@ public:
     }
 
     template <typename T>
-    void writeResults(const TProblem& state, uint8 idxAi, float maxIter, T& stream) {
+    void writeResults(const TProblem& state, int idxAi, float maxIter, T& stream) {
         stream << "Branch;ID;ParentID;Time;Move;Opponent;Select;Visit;Win";
         stream << std::endl;
 

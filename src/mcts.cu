@@ -7,7 +7,6 @@
 #include <mutex>
 #include <iostream>
 
-#include "defs.hpp"
 #include "mcts.cuh"
 
 // NOTE: this is a dirty solution, compile flow.cpp for cuda here
@@ -27,7 +26,7 @@ struct RolloutCUDA<TProblem>::impl {
 };
 
 template <typename TProblem>
-__global__ void rollout(const uint8 idxAi,
+__global__ void rollout(int idxAi,
                         const TProblem* u_state,
                         curandState* d_rnd,
                         double* u_result) {
@@ -127,7 +126,7 @@ RolloutCUDA<TProblem>::~RolloutCUDA() {
 }
 
 template <typename TProblem>
-__host__ bool RolloutCUDA<TProblem>::cuRollout(const uint8 idxAi,
+__host__ bool RolloutCUDA<TProblem>::cuRollout(const int idxAi,
                                                const TProblem& state,
                                                unsigned int iterations,
                                                double& winSum) const {
