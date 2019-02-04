@@ -1,16 +1,14 @@
 #ifndef MCTS_CUH
 #define MCTS_CUH
 
-#include <vector>
-
 #include "defs.hpp"
-#include "hearts.hpp"
 
 //! Execute multiple rollout on CUDA
 /*!
  * \details TODO
  * \author adamp87
 */
+template <class TProblem>
 class RolloutCUDA {
     struct impl;
     impl* pimpl;
@@ -25,7 +23,7 @@ public:
 
     //! TODO
     bool cuRollout(const uint8 idxAi,
-                   const Hearts& state,
+                   const TProblem& state,
                    unsigned int iteration,
                    double& winSum) const;
 };

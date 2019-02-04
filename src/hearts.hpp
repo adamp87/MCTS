@@ -5,7 +5,6 @@
 #include <vector>
 
 #include <random>
-#include <numeric>
 #include <algorithm>
 
 #include "defs.hpp"
@@ -30,6 +29,12 @@
  * \author adamp87
 */
 class Hearts {
+public:
+    typedef uint8 MoveType; //!< interface, dont edit until class uses it
+    typedef uint8 MoveCounterType; //!< interface, dont edit until class uses it
+    constexpr static unsigned int MaxMoves = 52; //!< interface
+    constexpr static unsigned int MaxChildPerNode = 39; //!< interface
+
 private:
     //! Stores the cards that only one player knows
     struct Player {
@@ -77,7 +82,8 @@ private:
 
     //! Compute points for each player
     CUDA_CALLABLE_MEMBER void computePoints(uint8* points) const {
-        const uint8 value_map[52] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        const uint8 value_map[52] = {
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 0, 0,
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
@@ -143,26 +149,30 @@ public:
         }
     }
 
-    uint8 getPlayer(uint8 time = 255) const {
+    //! Interface
+    uint8 getPlayer(int time = 255) const {
         if (time == 255)
             time = round * 4 + turn;
         return orderPlayer[time];
     }
 
-    uint8 getCardAtTime(uint8 time) const {
+    //! Interface
+    uint8 getMoveAtTime(int time) const {
         return orderInTime[time];
     }
 
-    uint8 isCardAtTimeValid(uint8 time) const {
+    //! Interface
+    uint8 isMoveAtTimeSet(int time) const {
         return orderInTime[time] != order_unset;
     }
 
-    CUDA_CALLABLE_MEMBER bool isGameOver() const {
+    //! Interface
+    CUDA_CALLABLE_MEMBER bool isFinished() const {
         return round == 13;
     }
 
-    //! Implements game logic, return the possible cards that next player can play
-    CUDA_CALLABLE_MEMBER uint8 getPossibleCards(uint8 idxAi, uint8* cards) const {
+    //! Interface, Implements game logic, return the possible cards that next player can play
+    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(uint8 idxAi, uint8* cards) const {
         uint8 count = 0;
         const Player& ai = players[idxAi];
         uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
@@ -304,12 +314,21 @@ public:
                 }
             }
         }
+
+#if 0 //debug_invalidState
+        if (count == 0) {
+            cards[0] = 255;
+            std::cout << "i";
+            return 1; // invalid state
+        }
+#endif
+
         return count;
 
         //TODO: filter cards (values next to each other), dont forget result is the same for all, dont discard here?
     }
 
-    //! Update the game state according to card
+    //! Interface, Update the game state according to card
     CUDA_CALLABLE_MEMBER void update(uint8 card) {
         //set card order
         uint8 time = round * 4 + turn;
@@ -327,13 +346,7 @@ public:
         }
     }
 
-    //! Compute points for each player
-    void computePoints(std::array<uint8, 4>& points) const {
-        points.fill(0);
-        computePoints(points.data());
-    }
-
-    //! Compute win value for MCTreeSearch, between 0-1
+    //! Interface, Compute win value for MCTreeSearch, between 0-1
     CUDA_CALLABLE_MEMBER double computeMCTSWin(uint8 idxAi) const {
         //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
         const double weight[28] = { // normalize win -> value between 1..0
@@ -358,6 +371,12 @@ public:
         }
 
         return weight[winIdx];
+    }
+
+    //! Compute points for each player
+    void computePoints(std::array<uint8, 4>& points) const {
+        points.fill(0);
+        computePoints(points.data());
     }
 
     bool isCardAtPlayer(uint8 idxAi, uint8 card) {

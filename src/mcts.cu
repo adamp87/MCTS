@@ -9,35 +9,42 @@
 
 #include "defs.hpp"
 #include "mcts.cuh"
-#include "hearts.hpp"
 
 // NOTE: this is a dirty solution, compile flow.cpp for cuda here
 #include "flownetwork.cpp"
 
-struct RolloutCUDA::impl {
-    Hearts* u_state;
-    double* u_result; //maxrollout
+class Hearts;
+template class RolloutCUDA<Hearts>;
+
+template <class TProblem>
+struct RolloutCUDA<TProblem>::impl {
+    TProblem* u_state;
+    double* u_result; //size=maxrollout
     curandState* d_rnd;
 
     std::mutex lock;
     constexpr static int nThread = 32;
 };
 
+template <typename TProblem>
 __global__ void rollout(const uint8 idxAi,
-                        const Hearts* u_state,
+                        const TProblem* u_state,
                         curandState* d_rnd,
                         double* u_result) {
+    typedef typename TProblem::MoveType MoveType;
+    typedef typename TProblem::MoveCounterType MoveCounterType;
+
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    uint8 cards[52];
-    Hearts state(*u_state);
+    TProblem state(*u_state);
+    MoveType cards[TProblem::MaxMoves];
 
     // Copy state to local memory for efficiency
     curandState localRnd = d_rnd[idx];
 
-    while (!state.isGameOver()) {
-        uint8 count = state.getPossibleCards(idxAi, cards);
-        uint8 pick = curand(&localRnd) % count;
+    while (!state.isFinished()) {
+        MoveCounterType count = state.getPossibleMoves(idxAi, cards);
+        MoveCounterType pick = curand(&localRnd) % count;
         state.update(cards[pick]);
     }
 
@@ -53,7 +60,8 @@ __global__ void setup_random(curandState* state, unsigned int seed) {
     curand_init(seed, id, 0, &state[id]);
 }
 
-RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
+template <class TProblem>
+RolloutCUDA<TProblem>::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
     pimpl = 0;
     int deviceCount = 0;
     if(cudaGetDeviceCount(&deviceCount) != cudaSuccess) {
@@ -85,7 +93,7 @@ RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
     std::unique_ptr<RolloutCUDA::impl> ptr(new RolloutCUDA::impl());
     dim3 threads(RolloutCUDA::impl::nThread);
     dim3 blocks(maxIterations / threads.x);
-    if(cudaMallocManaged(&ptr->u_state, sizeof(Hearts)) != cudaSuccess) {
+    if(cudaMallocManaged(&ptr->u_state, sizeof(TProblem)) != cudaSuccess) {
         std::cout << "Failed to allocate state" << std::endl;
         return;
     }
@@ -107,7 +115,8 @@ RolloutCUDA::RolloutCUDA(unsigned int* iterations, unsigned int seed) {
     pimpl = ptr.release();
 }
 
-RolloutCUDA::~RolloutCUDA() {
+template <class TProblem>
+RolloutCUDA<TProblem>::~RolloutCUDA() {
     if (pimpl == 0)
         return;
     cudaFree(pimpl->d_rnd);
@@ -117,10 +126,11 @@ RolloutCUDA::~RolloutCUDA() {
     pimpl = 0;
 }
 
-__host__ bool RolloutCUDA::cuRollout(const uint8 idxAi,
-                                     const Hearts& state,
-                                     unsigned int iterations,
-                                     double& winSum) const {
+template <typename TProblem>
+__host__ bool RolloutCUDA<TProblem>::cuRollout(const uint8 idxAi,
+                                               const TProblem& state,
+                                               unsigned int iterations,
+                                               double& winSum) const {
     std::unique_lock<std::mutex> lock(pimpl->lock, std::defer_lock);
     if (lock.try_lock() == false)
         return false;

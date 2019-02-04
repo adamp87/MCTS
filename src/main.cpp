@@ -26,13 +26,13 @@ int getSeed() {
 #endif
 
 #ifdef _OPENMP
-typedef MCTreeDynamic<MCTSNodeBaseMT<> > TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBaseMT<uint8> > TreeContainer;
 
 // keep static_assert, might be usefull later
-static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<> > >::value,
+static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<uint8> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeStaticArray<39> TreeContainer;
+typedef MCTreeStaticArray<uint8, Hearts::MaxChildPerNode> TreeContainer;
 #endif
 
 std::string formatCard(uint8 card) {
@@ -115,10 +115,10 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     Hearts state(cheat != 0);
-    std::array<MCTS<TreeContainer>, 4> ai;
+    std::array<MCTS<TreeContainer, Hearts>, 4> ai;
 
     // int cuda rollout
-    std::unique_ptr<RolloutCUDA> rolloutCuda(new RolloutCUDA(rolloutIter, seed));
+    std::unique_ptr<RolloutCUDA<Hearts> > rolloutCuda(new RolloutCUDA<Hearts>(rolloutIter, seed));
     if (rolloutCuda->hasGPU()) {
         std::cout << "GPU Mode" << std::endl;
     } else {

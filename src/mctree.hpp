@@ -7,45 +7,43 @@
 #include <mutex>
 #include <atomic>
 
-#include "defs.hpp"
-
 //! Base class for all Tree::Node implementations
-template <typename T_Card = uint8>
+template <typename T_Move>
 struct MCTSNodeBase {
-    typedef T_Card CardType;
+    typedef T_Move MoveType;
     typedef std::uint_fast32_t CountType;
 
     //! Dummy LockGuard, helps to keep policy transparent
     class LockGuard {
     public:
-        LockGuard(MCTSNodeBase<T_Card>&) {}
+        LockGuard(MCTSNodeBase<T_Move>&) {}
     };
 
-    T_Card      card;   //!< card played out
+    T_Move      move;   //!< e.g. card played out
     CountType   visits; //!< node visit count
     double      wins;   //!< number of wins
 
-    MCTSNodeBase(T_Card card)
-        : card(card), visits(1), wins(0.0)
+    MCTSNodeBase(T_Move move)
+        : move(move), visits(1), wins(0.0)
     { }
 };
 
 //! Base class for multithreaded MCTreeDynamic::Node
-template <typename T_Card = uint8>
+template <typename T_Move>
 struct MCTSNodeBaseMT {
-    typedef T_Card CardType;
+    typedef T_Move MoveType;
     typedef std::uint_fast32_t CountType;
 
     //! LockGuard inherited from std, constructor takes node
     class LockGuard : public std::lock_guard<std::mutex> {
     public:
-        LockGuard(MCTSNodeBaseMT<T_Card>& node)
+        LockGuard(MCTSNodeBaseMT<T_Move>& node)
             : std::lock_guard<std::mutex>(node.lock)
         {}
     };
 
+    //! Workaround, until C20 standard enables atomic for double
     class MyAtomicDouble {
-        // std::atomic<double> will be in standard c20
         double value;
         std::mutex lock;
 
@@ -54,23 +52,19 @@ struct MCTSNodeBaseMT {
         operator double() const {
             return value;
         }
-        void operator=(double val) {
-            std::lock_guard<std::mutex> guard(lock); (void)guard;
-            value = val;
-        }
         double operator+=(double& val) {
             std::lock_guard<std::mutex> guard(lock); (void)guard;
             value += val;
         }
     };
 
-    T_Card                  card;   //!< card played out
+    T_Move                  move;   //!< e.g. card played out
     std::mutex              lock;   //!< mutex for thread-safe policy
     std::atomic<CountType>  visits; //!< node visit count
     MyAtomicDouble          wins;   //!< number of wins for each points
 
-    MCTSNodeBaseMT(T_Card card)
-        : card(card), visits(1)
+    MCTSNodeBaseMT(T_Move move)
+        : move(move), visits(1)
     { }
 };
 
@@ -82,10 +76,10 @@ struct MCTSNodeBaseMT {
  *          Each node stores the pointers in a vector.
  * \author adamp87
 */
-template <typename T_NodeBase = MCTSNodeBase<> >
+template <typename T_NodeBase>
 class MCTreeDynamic {
 public:
-    typedef typename T_NodeBase::CardType CardType;
+    typedef typename T_NodeBase::MoveType MoveType;
 
     //! One node with childs, interface
     class Node : public T_NodeBase {
@@ -95,7 +89,7 @@ public:
         friend class ChildIterator;
         friend class MCTreeDynamic;
 
-        Node(CardType card) : T_NodeBase(card) {}
+        Node(MoveType move) : T_NodeBase(move) {}
         Node(const Node&) = delete;
     };
 
@@ -129,13 +123,14 @@ private:
 public:
     //! Construct tree, interface
     MCTreeDynamic() {
-        root.reset(new Node(255));
+        // artifical root, doesnt hold valid move
+        root.reset(new Node(0));
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, CardType card) const {
+    NodePtr addNode(NodePtr& _parent, MoveType move) const {
         // init leaf node
-        std::unique_ptr<Node> child(new Node(card));
+        std::unique_ptr<Node> child(new Node(move));
 
         _parent->childs.push_back(std::move(child));
         return _parent->childs.back().get();
@@ -162,22 +157,22 @@ public:
  * \details Nodes are stored contiguously in one vector.
  *          The root is the first node in the vector.
  *          The childs are stored as indices.
- *          Each node stores the indices in fixed length array, bounded by 39.
+ *          Each node stores the indices in fixed length array, bounded by N_MaxChild.
  * \author adamp87
 */
-template <unsigned int N_MaxChild>
+template <typename T_Move, unsigned int N_MaxChild>
 class MCTreeStaticArray {
 public:
-    typedef typename MCTSNodeBase<>::CardType CardType;
+    typedef T_Move MoveType;
 
     //! One node with childs, interface
-    class Node : public MCTSNodeBase<> {
+    class Node : public MCTSNodeBase<MoveType> {
         size_t childs[N_MaxChild]; //!< child indices as fixed length array
 
         friend class ChildIterator;
         friend class MCTreeStaticArray;
 
-        Node(CardType card) : MCTSNodeBase(card), childs{0} {}
+        Node(MoveType move) : MCTSNodeBase<MoveType>(move), childs{0} {}
     };
 
     //!< pointer to a node, interface
@@ -241,17 +236,18 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticArray() {
-        Node root(255);
+        // artifical root, doesnt hold valid move
+        Node root(0);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, CardType card) {
+    NodePtr addNode(NodePtr& _parent, MoveType move) {
         // init leaf node
-        Node child(card);
+        Node child(move);
 
         // find next free idx of parent to put child
-        uint8 idx = 0;
+        unsigned int idx = 0;
         Node& parent = *_parent;
         for (; idx < N_MaxChild; ++idx) {
             if (parent.childs[idx] == 0) {
@@ -292,19 +288,20 @@ public:
  *          Each node stores the indices for a next child and for its next brother.
  * \author adamp87
 */
+template <typename T_Move>
 class MCTreeStaticList {
-    typedef typename MCTSNodeBase<>::CardType CardType;
+    typedef T_Move MoveType;
 
 public:
     //! One node with childs, interface
-    class Node : public MCTSNodeBase<> {
+    class Node : public MCTSNodeBase<MoveType> {
         size_t child_head; //!< head of linked list for next child, breadth one level down
         size_t parent_next; //!< link to next child node of parent (brother), same breadth level
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
 
-        Node(CardType card) : MCTSNodeBase(card), child_head(0), parent_next(0) {}
+        Node(MoveType move) : MCTSNodeBase<MoveType>(move), child_head(0), parent_next(0) {}
     };
 
     //!< pointer to a node, interface
@@ -370,14 +367,15 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticList() {
-        Node root(255);
+        // artifical root, doesnt hold valid move
+        Node root(0);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, CardType card) {
+    NodePtr addNode(NodePtr& _parent, MoveType move) {
         // init leaf node
-        Node child(card);
+        Node child(move);
         Node& parent = *_parent;
         if (parent.child_head == 0) { // first child
             parent.child_head = nodes.size();
