@@ -52,7 +52,7 @@ struct MCTSNodeBaseMT {
         operator double() const {
             return value;
         }
-        double operator+=(double& val) {
+        void operator+=(double& val) {
             std::lock_guard<std::mutex> guard(lock); (void)guard;
             value += val;
         }
