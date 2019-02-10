@@ -146,7 +146,6 @@ __host__ bool RolloutCUDA<TProblem>::cuRollout(const int idxAi,
         return false;
     }
 
-    winSum = 0;
-    std::accumulate(pimpl->u_result, pimpl->u_result + iterations, 0.0);
+    winSum = std::accumulate(pimpl->u_result, pimpl->u_result + iterations, 0.0);
     return true;
 }
