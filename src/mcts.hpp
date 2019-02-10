@@ -246,7 +246,7 @@ public:
         stream << ";" << (int)opponent;
         stream << ";" << "0"; // not selected
         stream << ";" << next->visits / maxIter;
-        stream << ";" << next->wins / (float)next->visits; //TODO: divide?
+        stream << ";" << next->wins / (float)next->visits;
         stream << std::endl;
 
         auto it = TTree::getChildIterator(next);
@@ -284,7 +284,7 @@ public:
                     stream << ";" << (int)opponent;
                     stream << ";" << "1"; // selected
                     stream << ";" << next->visits / maxIter;
-                    stream << ";" << next->wins / (float)next->visits; //TODO: divide?
+                    stream << ";" << next->wins / (float)next->visits;
                     stream << std::endl;
 
                 } else { // not selected nodes
