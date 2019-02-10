@@ -5,6 +5,7 @@
 #include <curand_kernel.h>
 
 #include <mutex>
+#include <numeric>
 #include <iostream>
 
 #include "mcts.cuh"

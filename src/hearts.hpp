@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <random>
+#include <numeric>
 #include <algorithm>
 
 #include "defs.hpp"
