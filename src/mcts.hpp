@@ -238,9 +238,9 @@ public:
         stream << (int)branch;
         stream << ";" << TTree::getNodeId(next);
         stream << ";" << TTree::getNodeId(parent);
-        stream << ";" << (int)time;
-        stream << ";" << (int)next->move;
-        stream << ";" << (int)opponent;
+        stream << ";" << time; //TODO:fix
+        stream << ";" << TProblem::move2str(next->move);
+        stream << ";" << opponent; //TODO:fix
         stream << ";" << "0"; // not selected
         stream << ";" << next->visits / maxIter;
         stream << ";" << next->wins / (float)next->visits;
@@ -274,9 +274,9 @@ public:
                     stream << "0"; // not branch node, dont filter
                     stream << ";" << TTree::getNodeId(next);
                     stream << ";" << TTree::getNodeId(parent);
-                    stream << ";" << (int)time;
-                    stream << ";" << (int)next->move;
-                    stream << ";" << (int)opponent;
+                    stream << ";" << time;
+                    stream << ";" << TProblem::move2str(next->move);
+                    stream << ";" << opponent;
                     stream << ";" << "1"; // selected
                     stream << ";" << next->visits / maxIter;
                     stream << ";" << next->wins / (float)next->visits;

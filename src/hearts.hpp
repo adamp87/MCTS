@@ -3,6 +3,7 @@
 
 #include <array>
 #include <vector>
+#include <string>
 
 #include <random>
 #include <numeric>
@@ -372,6 +373,18 @@ public:
 
     bool isCardAtPlayer(int idxAi, uint8 card) {
         return hands[idxAi][card] == idxAi;
+    }
+
+    ///! Interface, convert move to string
+    static std::string move2str(uint8 card) {
+        const char colors[] = {'C', 'D', 'S', 'H'};
+        const char values[] = {'2', '3', '4', '5', '6', '7',
+                               '8', '9', '0', 'J', 'Q', 'K', 'A'};
+
+        std::string str("XX");
+        str[0] = colors[card / 13];
+        str[1] = values[card % 13];
+        return str;
     }
 };
 

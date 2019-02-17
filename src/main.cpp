@@ -35,17 +35,6 @@ static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<uint8> > 
 typedef MCTreeStaticArray<uint8, Hearts::MaxChildPerNode> TreeContainer;
 #endif
 
-std::string formatCard(uint8 card) {
-    const char colors[] = {'C', 'D', 'S', 'H'};
-    const char values[] = {'2', '3', '4', '5', '6', '7',
-                           '8', '9', '0', 'J', 'Q', 'K', 'A'};
-
-    std::string str("XX");
-    str[0] = colors[card / 13];
-    str[1] = values[card % 13];
-    return str;
-}
-
 int main(int argc, char** argv) {
     int cheat = 0;
     int writeTree = 0;
@@ -133,7 +122,7 @@ int main(int argc, char** argv) {
             for (uint8 value = 0; value < 13; ++value) {
                 uint8 card = 13 * color + value;
                 if (state.isCardAtPlayer(p, card)) {
-                    std::cout << formatCard(card) << " ";
+                    std::cout << Hearts::move2str(card) << " ";
                 }
             }
         }
@@ -150,7 +139,7 @@ int main(int argc, char** argv) {
             history.push_back(card);
 
             std::cout << "P" << int(player) << " ";
-            std::cout << formatCard(card) << " ";
+            std::cout << Hearts::move2str(card) << " ";
         }
         std::cout << std::endl;
     }
