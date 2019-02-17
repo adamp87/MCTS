@@ -29,6 +29,7 @@ struct RolloutCUDA<TProblem>::impl {
 
 template <typename TProblem>
 __global__ void rollout(int idxAi,
+                        int maxRolloutDepth,
                         const TProblem* u_state,
                         curandState* d_rnd,
                         double* u_result) {
@@ -43,7 +44,10 @@ __global__ void rollout(int idxAi,
     // Copy state to local memory for efficiency
     curandState localRnd = d_rnd[idx];
 
+    int depth = 0; //if max is zero, until finished
     while (!state.isFinished()) {
+        if (++depth == maxRolloutDepth)
+            break;
         MoveCounterType count = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
         MoveCounterType pick = curand(&localRnd) % count;
         state.update(moves[pick]);
@@ -128,7 +132,8 @@ RolloutCUDA<TProblem>::~RolloutCUDA() {
 }
 
 template <typename TProblem>
-__host__ bool RolloutCUDA<TProblem>::cuRollout(const int idxAi,
+__host__ bool RolloutCUDA<TProblem>::cuRollout(int idxAi,
+                                               int maxRolloutDepth,
                                                const TProblem& state,
                                                unsigned int iterations,
                                                double& winSum) const {
@@ -139,6 +144,7 @@ __host__ bool RolloutCUDA<TProblem>::cuRollout(const int idxAi,
     dim3 blocks(iterations / threads.x);
     *pimpl->u_state = state;
     rollout<<<blocks, threads>>>(idxAi,
+                                 maxRolloutDepth,
                                  pimpl->u_state,
                                  pimpl->d_rnd,
                                  pimpl->u_result);

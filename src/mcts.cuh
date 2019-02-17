@@ -21,6 +21,7 @@ public:
 
     //! TODO
     bool cuRollout(int idxAi,
+                   int maxRolloutDepth,
                    const TProblem& state,
                    unsigned int iteration,
                    double& winSum) const;

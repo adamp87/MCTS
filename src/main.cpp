@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
             int player = state.getPlayer(round * 4 + turn);
-            uint8 card = ai[player].execute(player, state, policyIter[player], rolloutIter[player], history, rolloutCuda.get());
+            uint8 card = ai[player].execute(player, 0, state, policyIter[player], rolloutIter[player], history, rolloutCuda.get());
             state.update(card);
             history.push_back(card);
 

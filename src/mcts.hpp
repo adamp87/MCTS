@@ -111,9 +111,12 @@ private:
     }
 
     //! Applies the rollout step of the Tree Search
-    bool rollout(TProblem& state, int idxAi) const {
+    bool rollout(TProblem& state, int idxAi, int maxRolloutDepth) const {
+        int depth = 0; //if max is zero, until finished
         MoveType moves[TProblem::MaxMoves];
         while (!state.isFinished()) {
+            if (++depth == maxRolloutDepth)
+                break;
             MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
             MoveCounterType pick = static_cast<MoveCounterType>(rand() % nMoves);
             state.update(moves[pick]);
@@ -180,6 +183,7 @@ public:
 
     //! Execute a search on the current state for the ai, return the move
     MoveType execute(int idxAi,
+                     int maxRolloutDepth,
                      const TProblem& cstate,
                      unsigned int policyIter,
                      unsigned int rolloutIter,
@@ -206,13 +210,13 @@ public:
             // selection and expansion
             NodePtr node = policy(subroot, state, idxAi, policy_nodes);
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                rollloutCuda->cuRollout(idxAi, state, rolloutIter, wins))
+                rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, wins))
             { // rollout on gpu (if has gpu, is requested and gpu is free)
                 backprop(policy_nodes, wins, rolloutIter);
             } else { // rollout on cpu (fallback)
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
                     TProblem rstate(state);
-                    rollout(rstate, idxAi);
+                    rollout(rstate, idxAi, maxRolloutDepth);
                     // backprop
                     wins = rstate.computeMCTSWin(idxAi);
                     backprop(policy_nodes, wins);

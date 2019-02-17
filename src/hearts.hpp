@@ -146,7 +146,7 @@ public:
     }
 
     //! Interface
-    int getPlayer(int time = 255) const {
+    CUDA_CALLABLE_MEMBER int getPlayer(int time = 255) const {
         if (time == 255)
             time = round * 4 + turn;
         return orderPlayer[time];
