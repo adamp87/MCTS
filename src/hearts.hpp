@@ -37,18 +37,14 @@ public:
     constexpr static unsigned int MaxChildPerNode = 39; //!< interface
 
 private:
-    //! Stores the cards that only one player knows
-    struct Player {
-        uint8 player; //!< fixed player id
-        uint8 hand[52]; //!< known cards: index card-value playerid; can store info after swap/open cards
-    };
+    typedef uint8 Player[52]; //!< known cards by one player: index card-value playerid; can store info after swap/open cards
 
     uint8 turn; //!< current turn, one round has 4 turns
     uint8 round; //!< current round, one game has 13 rounds
     uint8 orderInTime[52]; //!< game state: index time-value card
     uint8 orderAtCard[52]; //!< game state: index card-value time
     uint8 orderPlayer[52]; //!< game state: index time-value player
-    Player players[4]; //!< hand of each player
+    Player hands[4]; //!< hand of each player
 
     friend class FlowNetwork;
 
@@ -118,13 +114,12 @@ public:
         // set cards
         uint8 startPlayer = 0;
         for (uint8 i = 0; i < 4; ++i) {
-            players[i].player = i;
-            std::fill(players[i].hand, players[i].hand + 52, unset);//set to unknown
+            std::fill(hands[i], hands[i] + 52, unset);//set to unknown
             for (uint8 j = 0; j < 13; ++j) {
                 uint8 card = cards[i * 13 + j];
-                players[i].hand[card] = i; //set card to own id
+                hands[i][card] = i; //set card to own id
             }
-            if (players[i].hand[0] == i) { // set first player
+            if (hands[i][0] == i) { // set first player
                 startPlayer = i;
             }
         }
@@ -141,8 +136,8 @@ public:
                 for (uint8 value = 0; value < 13; ++value) {
                     uint8 card = 13 * color + value;
                     for (uint8 p2 = 0; p2 < 4; ++p2) {
-                        if (players[p2].hand[card] == p2) {
-                            players[p].hand[card] = p2; // player see cards of other players
+                        if (hands[p2][card] == p2) {
+                            hands[p][card] = p2; // player see cards of other players
                         }
                     }
                 }
@@ -162,11 +157,16 @@ public:
         return round == 13;
     }
 
-    //! Interface, Implements game logic, return the possible cards that next player can play
-    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(int idxAi, uint8* cards) const {
+    //! Interface, Implements game logic, return the possible cards that idxAi can play
+    /*!
+    * \param idxMe ID of player who executes function
+    * \param idxAi ID of player to get possible moves for
+    * \param cards Allocated array to store possible moves
+    * \return Number of possible moves
+    * \note Using hands[idxAi] is hard-coded cheating
+    */
+    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(int idxMe, int idxAi, uint8* cards) const {
         uint8 count = 0;
-        const Player& ai = players[idxAi];
-        uint8 player = orderPlayer[round * 4 + turn]; // possible cards for this player
         uint8 colorFirst = orderInTime[round * 4] / 13; //note, must check if not first run
 
         if (round == 0 && turn == 0) { // starting card
@@ -174,14 +174,14 @@ public:
             return 1;
         }
 
-        if (player == ai.player) { // own
+        if (idxAi == idxMe) { // own
             // check if has color
             bool aiHasNoColor[4];
             for (uint8 color = 0; color < 4; ++color) {
                 aiHasNoColor[color] = true;
                 for (uint8 value = 0; value < 13; ++value) {
                     uint8 card = color * 13 + value;
-                    if (ai.hand[card] == ai.player && orderAtCard[card] == Hearts::order_unset) {
+                    if (hands[idxMe][card] == idxMe && orderAtCard[card] == Hearts::order_unset) {
                         aiHasNoColor[color] = false;
                         break;
                     }
@@ -216,7 +216,7 @@ public:
                     if (orderAtCard[card] != order_unset)
                         continue; //card has been played
 
-                    if (ai.hand[card] == ai.player) {
+                    if (hands[idxMe][card] == idxMe) {
                         cards[count++] = card; // select card
                     }
                 }
@@ -231,7 +231,7 @@ public:
                     uint8 card = color * 13 + value;
                     if (orderAtCard[card] != order_unset)
                         continue; //card has been played
-                    if (ai.hand[card] == player) {
+                    if (hands[idxMe][card] == idxAi) {
                         knownToHaveColor[color] = true;
                         break;
                     }
@@ -262,10 +262,10 @@ public:
                 heartsBroken |= (nextColor == 3);
             }
 
-            FlowNetwork flow(*this, ai.player, hasNoColor);
+            FlowNetwork flow(*this, idxMe, hasNoColor);
 
             for (uint8 color = 0; color < 4; ++color) {
-                if (hasNoColor[player * 4 + color] == true)
+                if (hasNoColor[idxAi * 4 + color] == true)
                     continue; // ai has no card of this color
                 if (turn != 0 && color != colorFirst && knownToHaveColor[colorFirst] == true)
                     continue; // it is known that ai has card of the first color
@@ -275,19 +275,19 @@ public:
 
                 // verify if game becomes invalid by playing a card from the given color
                 if (knownToHaveColor[color] == false) {
-                    if (flow.verifyOneCard(player, color) == false)
+                    if (flow.verifyOneCard(idxAi, color) == false)
                         continue;
                 }
 
                 // verify if game becomes invalid by playing hearts as first card
                 if (turn == 0 && color == 3 && !heartsBroken && knownToHaveColor[3] == false) {
-                    if (flow.verifyHeart(player) == false)
+                    if (flow.verifyHeart(idxAi) == false)
                         continue;
                 }
 
                 // verify if game becomes invalid if not the first color is played
                 if (turn != 0 && color != colorFirst && knownToHaveColor[color] == false) {
-                    if (flow.verifyOneColor(player, colorFirst) == false)
+                    if (flow.verifyOneColor(idxAi, colorFirst) == false)
                         continue;
                 }
 
@@ -299,7 +299,7 @@ public:
                     if (orderAtCard[card] != order_unset)
                         continue; //card has been played
 
-                    if (ai.hand[card] == player || ai.hand[card] == Hearts::order_unset) {
+                    if (hands[idxMe][card] == idxAi || hands[idxMe][card] == Hearts::order_unset) {
                         cards[count++] = card; // select from known or unknown opponent cards
                     }
                 }
@@ -371,7 +371,7 @@ public:
     }
 
     bool isCardAtPlayer(int idxAi, uint8 card) {
-        return players[idxAi].hand[card] == idxAi;
+        return hands[idxAi][card] == idxAi;
     }
 };
 

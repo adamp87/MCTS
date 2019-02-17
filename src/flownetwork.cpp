@@ -22,11 +22,11 @@ CUDA_CALLABLE_MEMBER FlowNetwork::FlowNetwork(const Hearts& state, uint8 idxAi, 
             uint8 card = color * 13 + value;
             if (state.orderAtCard[card] != Hearts::order_unset)
                 continue; //card has been played
-            if (state.players[idxAi].hand[card] == Hearts::order_unset) {
+            if (state.hands[idxAi][card] == Hearts::order_unset) {
                 graph[getEdge(node_s, node_cA(color))] += 1; // unknown by color
             }
-            else if (state.players[idxAi].hand[card] != idxAi) { // card is known because of swap(or open cards)
-                graph[getEdge(node_pA(state.players[idxAi].hand[card]), node_t)] -= 1;
+            else if (state.hands[idxAi][card] != idxAi) { // card is known because of swap(or open cards)
+                graph[getEdge(node_pA(state.hands[idxAi][card]), node_t)] -= 1;
             }
         }
 

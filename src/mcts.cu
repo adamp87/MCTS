@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "mcts.cuh"
+#include "hearts.hpp"
 
 // NOTE: this is a dirty solution, compile flow.cpp for cuda here
 #include "flownetwork.cpp"
@@ -37,15 +38,15 @@ __global__ void rollout(int idxAi,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     TProblem state(*u_state);
-    MoveType cards[TProblem::MaxMoves];
+    MoveType moves[TProblem::MaxMoves];
 
     // Copy state to local memory for efficiency
     curandState localRnd = d_rnd[idx];
 
     while (!state.isFinished()) {
-        MoveCounterType count = state.getPossibleMoves(idxAi, cards);
+        MoveCounterType count = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
         MoveCounterType pick = curand(&localRnd) % count;
-        state.update(cards[pick]);
+        state.update(moves[pick]);
     }
 
     // Copy state back to global memory

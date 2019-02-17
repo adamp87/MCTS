@@ -61,7 +61,7 @@ private:
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isFinished()) {
             // get possible moves
-            MoveCounterType nMoves = state.getPossibleMoves(idxAi, moves);
+            MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
 
             { // thread-safe scope
                 LockGuard guard(*node); (void)guard;
@@ -114,7 +114,7 @@ private:
     bool rollout(TProblem& state, int idxAi) const {
         MoveType moves[TProblem::MaxMoves];
         while (!state.isFinished()) {
-            MoveCounterType nMoves = state.getPossibleMoves(idxAi, moves);
+            MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
             MoveCounterType pick = static_cast<MoveCounterType>(rand() % nMoves);
             state.update(moves[pick]);
         }
@@ -138,7 +138,7 @@ private:
         double n = static_cast<double>(node.visits);
 
         if (isOpponent)
-            q = n-q; // opponent is trying to maximalize points
+            q = n-q; // opponent is trying to minimalize win
         double val = q / n + sqrt(c*subRootVisitLog/n);
         return val;
     }
@@ -190,7 +190,7 @@ public:
         NodePtr subroot = catchup(cstate, history);
         { // only one choice, dont think
             MoveType moves[TProblem::MaxMoves];
-            MoveCounterType nMoves = cstate.getPossibleMoves(idxAi, moves);
+            MoveCounterType nMoves = cstate.getPossibleMoves(idxAi, idxAi, moves);
             if (nMoves == 1) {
                 return moves[0];
             }
