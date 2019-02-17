@@ -124,7 +124,7 @@ public:
     //! Construct tree, interface
     MCTreeDynamic() {
         // artifical root, doesnt hold valid move
-        root.reset(new Node(0));
+        root.reset(new Node(MoveType()));
     }
 
     //! Add a new node to parent, interface
@@ -237,7 +237,8 @@ public:
     //! Construct tree, interface
     MCTreeStaticArray() {
         // artifical root, doesnt hold valid move
-        Node root(0);
+        MoveType dummy = MoveType();
+        Node root(dummy);
         nodes.push_back(root);
     }
 
@@ -368,7 +369,8 @@ public:
     //! Construct tree, interface
     MCTreeStaticList() {
         // artifical root, doesnt hold valid move
-        Node root(0);
+        MoveType dummy = MoveType();
+        Node root(dummy);
         nodes.push_back(root);
     }
 
