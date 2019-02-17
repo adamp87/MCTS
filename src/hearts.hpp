@@ -158,16 +158,6 @@ public:
     }
 
     //! Interface
-    uint8 getMoveAtTime(int time) const {
-        return orderInTime[time];
-    }
-
-    //! Interface
-    uint8 isMoveAtTimeSet(int time) const {
-        return orderInTime[time] != order_unset;
-    }
-
-    //! Interface
     CUDA_CALLABLE_MEMBER bool isFinished() const {
         return round == 13;
     }

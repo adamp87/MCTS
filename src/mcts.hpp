@@ -13,7 +13,8 @@
 /*!
  * \details This class implements Monte Carlo tree search as described in Wikipedia.
  *          It follows the policy-rollout-backprop idea.
- *          Before policy, it walks the tree according to the current state of the game, this is called catchup.
+ *          Before policy, it walks the tree according to the history of the state of the problem, this is called catchup.
+ *          History must be handled by the main program.
  *          To have a generic implementation, the win value for each iteration is a floating point value between 0 and 1.
  *
  *          The underlying data container is transparent for this class.
@@ -31,31 +32,25 @@ class MCTS : public TTree {
     typedef typename TProblem::MoveCounterType MoveCounterType;
 
 private:
-    //! Walk the tree according to the state of the game
-    NodePtr catchup(const TProblem& state, std::vector<NodePtr>& visited_nodes) {
+    //! Walk the tree according to the history of the problem
+    NodePtr catchup(const TProblem& state, const std::vector<MoveType>& history) {
         NodePtr node = TTree::getRoot();
-        visited_nodes.push_back(node);
 
-        for (int time = 0; ; ++time) {
-            if (!state.isMoveAtTimeSet(time))
-                break;
-
+        for (size_t time = 0; time < history.size(); ++time) {
             bool found = false;
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                if (child->move == state.getMoveAtTime(time)) {
+                if (child->move == history[time]) {
                     node = child;
                     found = true;
                     break;
                 }
             }
-            if (!found) { // no child, update tree according to state
-                node = TTree::addNode(node, state.getMoveAtTime(time));
+            if (!found) { // no child, update tree according to history
+                node = TTree::addNode(node, history[time]);
             }
-            visited_nodes.push_back(node);
         }
-        visited_nodes.pop_back(); // remove subroot from catchup
         return node;
     }
 
@@ -184,17 +179,15 @@ public:
     MCTS() { }
 
     //! Execute a search on the current state for the ai, return the move
-    MoveType execute(const int idxAi,
+    MoveType execute(int idxAi,
                      const TProblem& cstate,
                      unsigned int policyIter,
                      unsigned int rolloutIter,
+                     const std::vector<MoveType>& history,
                      RolloutCUDA<TProblem>* rollloutCuda)
     {
-        std::vector<NodePtr> catchup_nodes;
-        catchup_nodes.reserve(TProblem::MaxMoves);
-
-        // walk tree according to state
-        NodePtr subroot = catchup(cstate, catchup_nodes);
+        // walk tree according to history
+        NodePtr subroot = catchup(cstate, history);
         { // only one choice, dont think
             MoveType moves[TProblem::MaxMoves];
             MoveCounterType nMoves = cstate.getPossibleMoves(idxAi, moves);
@@ -257,16 +250,14 @@ public:
     }
 
     template <typename T>
-    void writeResults(const TProblem& state, int idxAi, float maxIter, T& stream) {
+    void writeResults(const TProblem& state, int idxAi, float maxIter, const std::vector<MoveType>& history, T& stream) {
         stream << "Branch;ID;ParentID;Time;Move;Opponent;Select;Visit;Win";
         stream << std::endl;
 
         NodePtr parent = TTree::getRoot();
         NodePtr child = TTree::getRoot();
-        for (int time = 0; ; ++time) {
-            if (!state.isMoveAtTimeSet(time))
-                break;
-            MoveType move = state.getMoveAtTime(time);
+        for (size_t time = 0; time < history.size() ; ++time) {
+            MoveType move = history[time];
             int opponent = state.getPlayer(time) != idxAi ? 1 : 0;
 
             auto it = TTree::getChildIterator(parent);

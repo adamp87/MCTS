@@ -115,6 +115,7 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     Hearts state(cheat != 0);
+    std::vector<Hearts::MoveType> history;
     std::array<MCTS<TreeContainer, Hearts>, 4> ai;
 
     // int cuda rollout
@@ -144,8 +145,9 @@ int main(int argc, char** argv) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
             int player = state.getPlayer(round * 4 + turn);
-            uint8 card = ai[player].execute(player, state, policyIter[player], rolloutIter[player], rolloutCuda.get());
+            uint8 card = ai[player].execute(player, state, policyIter[player], rolloutIter[player], history, rolloutCuda.get());
             state.update(card);
+            history.push_back(card);
 
             std::cout << "P" << int(player) << " ";
             std::cout << formatCard(card) << " ";
@@ -171,7 +173,7 @@ int main(int argc, char** argv) {
 
         file.open(filename.str());
         float maxIter = float(policyIter[p] * rolloutIter[p]);
-        ai[p].writeResults(state, p, maxIter, file);
+        ai[p].writeResults(state, p, maxIter, history, file);
         file.close();
 
         { // filter results, write only first level branch nodes
