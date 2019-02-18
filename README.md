@@ -1,27 +1,49 @@
-# Gameagent for Hearts
+# Monte-Carlo Tree Search (MCTS)
 
-Multithreaded Monte Carlo tree search based gameagent.
-
-* [Game rules](https://en.wikipedia.org/wiki/Hearts)
-* [Monte Carlo tree search](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search)
-* [Ford-Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
-
-Gameagent is written in C++.
-Only the standard library is used, no external library is included.
+A generic multithreaded Monte-Carlo tree search algorithm with CUDA accelerated random rollout.
+Only the standard C++ library is used, no external library is included.
 Multithreading is implemented with the help of OpenMP, which is supported by recent compilers (GCC: “-fopenmp”, MSVC: “/openmp”).
+CUDA compiling is optional.
+Interfacing between problems and mcts is solved with templates.
+Similarly, the interface of the underlying tree container for mcts is also based on templates.
+
+Problems that can be solved:
+
+* Chess
+* Card game Hearts
+
 Source files contain inline documentation with doxygen syntax:
 
-* src/hearts.hpp - Game handling and logic
+* src/chess.hpp - Game handling and logic for Chess
+* src/hearts.hpp - Game handling and logic for card game Hearts
 * src/mcts.hpp - Monte Carlo tree search
-* src/mctree.hpp - Underlying tree containers for tree search
-* src/flownetwork.hpp - Solve assignment problem with Ford-Fulkerson
+* src/mcts.cu(h) - CUDA implementation to execute multiple random rollouts
+* src/mctree.hpp - Several underlying tree containers for tree search
+* src/flownetwork.hpp - Solve assignment problem with Ford-Fulkerson, for handling unknown cards in game Hearts
+* src/main_chess.cpp - Console input/output for game Chess
+* src/main_hearts.cpp - Console output for card game Hearts
 
 Python tools:
 
-* tools/dispatcher.py - Execute several instances of Gameagent and perform tests
-* tools/visualization.ipynb - Jupyter Notebook to visualize gametree
+* tools/dispatcher.py - Execute several instances of Hearts and perform tests
+* tools/visualization.ipynb - Jupyter Notebook to visualize gametree (currently for Hearts)
 
-# Discussion
+# Links
+
+* [Game rules for Hearts](https://en.wikipedia.org/wiki/Hearts)
+* [Browser based Hearts, implemented rules](https://cardgames.io/hearts/)
+* [Monte Carlo tree search](https://en.wikipedia.org/wiki/Monte_Carlo_tree_search)
+* [Ford-Fulkerson algorithm](https://en.wikipedia.org/wiki/Ford%E2%80%93Fulkerson_algorithm)
+
+# Licensing
+
+This code is purely for educational purpose and it is not intended to be used in any form.
+You can do this at your own risk, I am not responsible for your actions.
+I would appreciate if you use this code, mentioning the original source and helping me in further developing it.
+By using the code, you agree on these terms and it is your fault if you skipped reading this section, or used a previous commit.
+A common license might be added in the future, for now, please be fair and responsible. Thank You!
+
+# Hearts Discussion
 
 A game was simulated, where 3 random players play against one AI with 1e5 policy iterations and for each policy 1 rollout iteration.
 Figure 1 visualizes the game tree of the AI player.
@@ -83,4 +105,8 @@ The executed games had 3 random players and one AI with 2e5 policy and 1 rollout
 Figure 4 visualizes the histogram and shows that the AI received 3 times more zero points.
 
 ![F4](doc/points.png "Figure 4: Histogram of final points after 1792 games.")
+
+# Chess Discussion
+
+TODO
 
