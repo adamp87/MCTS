@@ -1,6 +1,8 @@
 #include "mcts.cuh"
 
+class Chess;
 class Hearts;
+template class RolloutCUDA<Chess>;
 template class RolloutCUDA<Hearts>;
 
 // dummy functions for CPU compilation
