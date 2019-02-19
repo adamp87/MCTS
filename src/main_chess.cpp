@@ -44,7 +44,7 @@ Chess::MoveType getCmdInput(const Chess& state, int player) {
         std::string moveStr;
         std::cout << "Player" << player << ": ";
         std::cin >> moveStr;
-        std::transform(moveStr.begin(), moveStr.end(), moveStr.begin(), [](unsigned char c){ return std::toupper(c); });
+        std::transform(moveStr.begin(), moveStr.end(), moveStr.begin(), [](unsigned char c){ return ::toupper(c); });
         if (moveStr.size() < 4)
             continue;
         moveStr.push_back('N'); // make sure has 4th element

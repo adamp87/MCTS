@@ -401,11 +401,6 @@ public:
         std::string str("X2X");
         str[0] = figs[t1];
         str[2] = figs[t2];
-        for (int i = 0; i < 32; ++i) {
-            if (figures[i].type == Figure::Unset)
-                continue;
-            str[4+i] = figs[figures[i].type];
-        }
         return str;
     }
 
