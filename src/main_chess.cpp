@@ -68,6 +68,12 @@ Chess::MoveType getCmdInput(const Chess& state, int player) {
         case 'K':
             moveT = Chess::MoveType::PromoteK;
             break;
+        case 'M': // game must be finished explicitly
+            moveT = Chess::MoveType::CheckMate;
+            break;
+        case 'D': // game must be finished explicitly
+            moveT = Chess::MoveType::Even;
+            break;
         default:
             break;
         }
