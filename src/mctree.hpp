@@ -42,10 +42,9 @@ struct MCTSNodeBaseMT {
         {}
     };
 
-    //! Workaround, until C20 standard enables atomic for double
+    //! Workaround, until C20 standard enables atomic operations for double
     class MyAtomicDouble {
-        double value;
-        std::mutex lock;
+        std::atomic<double> value;
 
     public:
         MyAtomicDouble() : value(0) {}
@@ -53,8 +52,9 @@ struct MCTSNodeBaseMT {
             return value;
         }
         void operator+=(double& val) {
-            std::lock_guard<std::mutex> guard(lock); (void)guard;
-            value += val;
+            double prev = value;
+            double next = prev+val;
+            while (!value.compare_exchange_weak(prev, next)) { }
         }
     };
 
