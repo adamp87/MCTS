@@ -363,25 +363,20 @@ public:
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
     CUDA_CALLABLE_MEMBER double computeMCTSWin(int idxAi) const {
-        const double figureValue[] = {0.0, 1.0, 2.0, 2.0, 4.0, 8.0, 1.0};
-        const double maxValue = 8*figureValue[1]+
-                                2*figureValue[2]+
-                                2*figureValue[3]+
-                                2*figureValue[4]+
-                                1*figureValue[5]+
-                                1*figureValue[6];
-        //TODO: maxvalue? all pawns could be queens!
-        double win = 0.5;
+        const double figureValue[] = {0.0, 1.0, 3.0, 3.0, 5.0, 9.0, 4.0};
         double aiWin = 0.0;
         double opWin = 0.0;
         int idxOp = (idxAi+1)%2;
-        for (int i = 0; i < 16; ++i) {
+        for (int i = 0; i < 16; ++i)
+        { // compute weighted sum of figure-points for each player
             aiWin+=figureValue[figures[idxAi*16+i].type];
             opWin+=figureValue[figures[idxOp*16+i].type];
         }
-        aiWin /= (maxValue*2.0);
-        opWin /= (maxValue*2.0);
-        win += (aiWin-opWin); // value based on the number and value of ai and op figures
+        // win is the ratio between current players points
+        // divided with the total number of points on the board
+        // NOTE: if player has more points in tends to swap figures of same value
+        // NOTE: if player has less points in tends not to change figures of same value
+        double win = aiWin/(aiWin+opWin);
         if (figures[idxAi*16].type == Figure::Unset && figures[idxOp*16].type == Figure::Unset)
             return 0.5; // even
         if (figures[idxAi*16].type == Figure::Unset)
