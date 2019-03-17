@@ -15,7 +15,7 @@
 
 //! Stores the state of the figures on the board
 /*!
- * \details This class implements the function getPossibleCards for applying AI.
+ * \details This class implements the function getPossibleMoves for applying AI.
  *          This function returns those moves, which can be played in the next turn without breaking the rules.
  *          Other functionalities are helping to simulate a game and to get the an evaluation of the current state.
  * \author adamp87
@@ -60,7 +60,7 @@ private:
         enum Type { Unset=0, Pawn=1, Knight=2, Bishop=3, Rook=4, Queen=5, King=6 };
         Type type;
         int playerIdx;
-        std::int_fast16_t lastMoveTime;
+        std::int_fast16_t movedCount;
 
         Figure() : type(Unset) { }
     };
@@ -94,12 +94,12 @@ public:
             figures[7+16*idxAi].posX = 5;
             figures[7+16*idxAi].type = Figure::Bishop;
             for (int i = 0; i < 8; ++i) {
-                figures[i+16*idxAi].lastMoveTime = -1;
+                figures[i+16*idxAi].movedCount = 0;
                 figures[i+16*idxAi].playerIdx = idxAi;
                 figures[i+16*idxAi].posY = idxAi==0?0:7;
             }
             for(int i = 0; i < 8; ++i) {
-                figures[i+8+16*idxAi].lastMoveTime = -1;
+                figures[i+8+16*idxAi].movedCount = 0;
                 figures[i+8+16*idxAi].playerIdx = idxAi;
                 figures[i+8+16*idxAi].posX = i;
                 figures[i+8+16*idxAi].posY = idxAi==0?1:6;
@@ -140,7 +140,7 @@ public:
         auto isInsideBoard = [&] (int x, int y, int dx, int dy) -> bool { int xx=x+dx; int yy=y+dy; return 0<=xx && xx<8 && 0<=yy && yy<8; };
         auto isFree = [&] (int x, int y, int dx, int dy) -> bool { return isInsideBoard(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Unset; };
         auto isOpponent = [&] (int x, int y, int dx, int dy) -> bool { return isInsideBoard(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type != Figure::Unset && board[getPos(x,y,dx,dy)].playerIdx != idxAi; };
-        auto isEnPassant = [&] (int x, int y, int dx, int dy) -> bool { return isOpponent(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Pawn && board[getPos(x,y,dx,dy)].lastMoveTime == time-1; };
+        auto isEnPassant = [&] (int x, int y, int dx, int dy) -> bool { return isOpponent(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Pawn && board[getPos(x,y,dx,dy)].movedCount == 1; };
 
         auto isKingInCheck = [&] (int x, int y, int dx, int dy, MoveType::Type type=MoveType::Normal) -> bool {
             if (!checkKing)
@@ -193,16 +193,16 @@ public:
         };
 
         auto castlingL = [&] (int x, int y) -> bool {
-            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].lastMoveTime != -1;
-            bool isRookMoved = figures[idxAi*16+2].type != Figure::Rook || figures[idxAi*16+2].lastMoveTime != -1;
+            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].movedCount != 0;
+            bool isRookMoved = figures[idxAi*16+2].type != Figure::Rook || figures[idxAi*16+2].movedCount != 0;
             return (!isKingMoved && !isRookMoved &&
                     isFree(x, y, -1, 0) && isFree(x, y, -2, 0) && isFree(x, y, -3, 0) &&
                     !isKingInCheck(x, y, 0, 0) && !isKingInCheck(x, y, -1, 0) && !isKingInCheck(x, y, -2, 0));
         };
 
         auto castlingR = [&] (int x, int y) -> bool {
-            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].lastMoveTime != -1;
-            bool isRookMoved = figures[idxAi*16+3].type != Figure::Rook || figures[idxAi*16+3].lastMoveTime != -1;
+            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].movedCount != 0;
+            bool isRookMoved = figures[idxAi*16+3].type != Figure::Rook || figures[idxAi*16+3].movedCount != 0;
             return (!isKingMoved && !isRookMoved &&
                     isFree(x, y, +1, 0) && isFree(x, y, +2, 0) &&
                     !isKingInCheck(x, y, 0, 0) && !isKingInCheck(x, y, +1, 0) && !isKingInCheck(x, y, +2, 0));
@@ -306,7 +306,7 @@ public:
         return nMoves;
     }
 
-    //! Interface, Update the game state according to card
+    //! Interface, Update the game state according to move
     CUDA_CALLABLE_MEMBER void update(MoveType& move) {
         int idxAi = getPlayer(time);
         int idxOp = getPlayer(time+1);
@@ -314,21 +314,26 @@ public:
             if (figures[i].type != Figure::Unset && figures[i].posX == move.fromX && figures[i].posY == move.fromY) {
                 figures[i].posX = move.toX;
                 figures[i].posY = move.toY;
-                figures[i].lastMoveTime = time;
+                figures[i].movedCount += 1;
+                for(int i = idxOp*16; i < 16*(idxOp+1); ++i) { // remove opponent figure
+                    if (figures[i].posX == move.toX && figures[i].posY == move.toY) {
+                        figures[i].type = Figure::Unset;
+                    }
+                }
                 switch (move.type) {
                 case MoveType::Normal:
-                    for(int i = idxOp*16; i < 16*(idxOp+1); ++i) {
-                        if (figures[i].posX == move.toX && figures[i].posY == move.toY) {
+                    break;
+                case MoveType::Castling:
+                    // move rook
+                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].posX = move.toX+((move.toX<move.fromX)?1:-1);
+                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].movedCount += 1;
+                    break;
+                case MoveType::EnPassant:
+                    for(int i = idxOp*16+8; i < 16*(idxOp+1); ++i) { // remove opponent pawn
+                        if (figures[i].posX == move.toX && figures[i].posY == move.fromY) {
                             figures[i].type = Figure::Unset;
                         }
                     }
-                    break;
-                case MoveType::Castling:
-                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].posX = move.toX+((move.toX<move.fromX)?1:-1);
-                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].lastMoveTime = time;
-                    break;
-                case MoveType::EnPassant:
-                    figures[idxOp*16+8+move.toX].type = Figure::Unset;
                     break;
                 case MoveType::PromoteK:
                     figures[i].type = Figure::Knight;
@@ -428,21 +433,36 @@ public:
         }
         chess.figures[0].type = Figure::King;
         chess.figures[2].type = Figure::Rook;
+        chess.figures[3].type = Figure::Rook;
+        chess.figures[3].movedCount = 1;
         chess.figures[8].type = Figure::Pawn;
+        chess.figures[8].posY = 4;
+        chess.figures[8].movedCount = 1;
+        chess.figures[8+7].type = Figure::Pawn;
+        chess.figures[8+7].posX = 6;
+        chess.figures[8+7].posY = 6;
+        chess.figures[8+7].movedCount = 1;
         chess.figures[16].type = Figure::King;
-        chess.figures[16+8+1].type = Figure::Pawn;
-        MoveType moveWhitePawnToEnPassant(0, 1, 0, 4);
-        MoveType moveBlackPawnToEnPassant(1, 6, 1, 4);
-        chess.update(moveWhitePawnToEnPassant);
-        chess.update(moveBlackPawnToEnPassant);
+        chess.figures[16+3].type = Figure::Rook;
+        chess.figures[16+3].movedCount = 1;
+        chess.figures[16+8+4].type = Figure::Pawn;
+        chess.figures[16+8+4].posX = 1;
+        chess.figures[16+8+4].posY = 4;
+        chess.figures[16+8+4].movedCount = 1;
         MoveType moves[Chess::MaxMoves];
         MoveCounterType nMoves = chess.getPossibleMoves(0, 0, moves);
 
+        MoveType movePromote;
         MoveType moveCastling;
         MoveType moveEnPassant;
+        bool canPromote = false;
         bool canCastling = false;
         bool canEnPassant = false;
         for (int i = 0; i < nMoves; ++i) {
+            if (moves[i].type == MoveType::PromoteQ) {
+                canPromote = true;
+                movePromote = moves[i];
+            }
             if (moves[i].type == MoveType::Castling) {
                 canCastling = true;
                 moveCastling = moves[i];
@@ -452,13 +472,21 @@ public:
                 moveEnPassant = moves[i];
             }
         }
-        if (!canCastling || !canEnPassant)
+        if (!canCastling || !canEnPassant || !canPromote)
             return false;
 
+        Chess chessPromote(chess);
         Chess chessCastling(chess);
         Chess chessEnPassant(chess);
+        chessPromote.update(movePromote);
         chessCastling.update(moveCastling);
         chessEnPassant.update(moveEnPassant);
+        bool donePromote  = chessPromote.figures[8+7].posX == 7 &&
+                            chessPromote.figures[8+7].posY == 7 &&
+                            chessPromote.figures[8+7].type == Figure::Queen &&
+                            chessPromote.figures[16+3].posX == 7 &&
+                            chessPromote.figures[16+3].posY == 7 &&
+                            chessPromote.figures[16+3].type == Figure::Unset;
         bool doneCastling = chessCastling.figures[0].posX == 2 &&
                             chessCastling.figures[0].posY == 0 &&
                             chessCastling.figures[0].type == Figure::King &&
@@ -468,10 +496,10 @@ public:
         bool doneEnPassant =chessEnPassant.figures[8].posX == 1 &&
                             chessEnPassant.figures[8].posY == 5 &&
                             chessEnPassant.figures[8].type == Figure::Pawn &&
-                            chessEnPassant.figures[16+8+1].posX == 1 &&
-                            chessEnPassant.figures[16+8+1].posY == 4 &&
-                            chessEnPassant.figures[16+8+1].type == Figure::Unset;
-        if (!doneCastling || !doneEnPassant)
+                            chessEnPassant.figures[16+8+4].posX == 1 &&
+                            chessEnPassant.figures[16+8+4].posY == 4 &&
+                            chessEnPassant.figures[16+8+4].type == Figure::Unset;
+        if (!doneCastling || !doneEnPassant || !donePromote)
             return false;
         return true;
     }
