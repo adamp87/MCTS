@@ -24,7 +24,7 @@ struct MCTSNodeBase {
     double      wins;   //!< number of wins
 
     MCTSNodeBase(T_Move move)
-        : move(move), visits(1), wins(0.0)
+        : move(move), visits(0), wins(0.0)
     { }
 };
 
@@ -64,7 +64,7 @@ struct MCTSNodeBaseMT {
     MyAtomicDouble          wins;   //!< number of wins for each points
 
     MCTSNodeBaseMT(T_Move move)
-        : move(move), visits(1)
+        : move(move), visits(0)
     { }
 };
 

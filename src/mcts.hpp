@@ -90,10 +90,12 @@ private:
 
             // node fully expanded
             // set node to best leaf
-            // compute subRootVisit for each iteration, multithread
             NodePtr best = node; // init
             double best_val = -std::numeric_limits<double>::max();
-            double subRootVisitLog = log(static_cast<double>(subRoot->visits));
+            // compute subRootVisit for each iteration, multithread
+            double subRootVisitLog = static_cast<double>(subRoot->visits);
+            subRootVisitLog += std::numeric_limits<double>::epsilon(); // avoid log(0)
+            subRootVisitLog = log(subRootVisitLog);
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
@@ -139,6 +141,7 @@ private:
         const Node& node = *_node;
         double q = node.wins;
         double n = static_cast<double>(node.visits);
+        n += std::numeric_limits<double>::epsilon(); //avoid div by 0
 
         if (isOpponent)
             q = n-q; // opponent is trying to minimalize win
