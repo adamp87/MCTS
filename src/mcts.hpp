@@ -15,7 +15,8 @@
  *          It follows the policy-rollout-backprop idea.
  *          Before policy, it walks the tree according to the history of the state of the problem, this is called catchup.
  *          History must be handled by the main program.
- *          To have a generic implementation, the win value for each iteration is a floating point value between 0 and 1.
+ *          The tree search does not know the exact problem it solves.
+ *          Interfacing with the problem is done by template interfaces.
  *
  *          The underlying data container is transparent for this class.
  *          A container must support the template interface required by the tree search.
@@ -99,7 +100,7 @@ private:
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                double val = value(child, subRootVisitLog, idxAi != state.getPlayer());
+                double val = value(child, subRootVisitLog, idxAi != state.getPlayer(), TProblem::UCT_C);
                 if (best_val < val) {
                     best = child;
                     best_val = val;
@@ -127,17 +128,17 @@ private:
     }
 
     //! Applies the backprop step of the Tree Search
-    void backprop(std::vector<NodePtr>& visited_nodes, double win, CountType vis = 1) const {
+    void backprop(std::vector<NodePtr>& visited_nodes, double win) const {
         // backprop results to visited nodes
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
-            node.visits += vis;
+            node.visits++;
             node.wins += win;
         }
     }
 
     //! Returns the value of a node for tree search evaluation
-    double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent, double c = 2.0) const {
+    double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent, double c) const {
         const Node& node = *_node;
         double q = node.wins;
         double n = static_cast<double>(node.visits);
@@ -145,7 +146,7 @@ private:
 
         if (isOpponent)
             q = n-q; // opponent is trying to minimalize win
-        double val = q / n + sqrt(c*subRootVisitLog/n);
+        double val = q / n + c * sqrt(subRootVisitLog/n);
         return val;
     }
 
@@ -170,7 +171,7 @@ private:
         auto it = TTree::getChildIterator(node);
         while (it.hasNext()) {
             NodePtr child = it.next();
-            double val = value(child, nodeVisitLog, false, 0.5);
+            double val = value(child, nodeVisitLog, false, 0.0);
             if (best_val < val) {
                 best_ptr = child;
                 best_val = val;
@@ -179,6 +180,7 @@ private:
         return best_ptr->move;
         // NOTE: use lower exploration rate for value computation to
         //       avoid selection of a node, which has a low visit count
+        // NOTE: other solution to use constant zero, win ratio decides
     }
 
 public:
@@ -206,24 +208,27 @@ public:
         #pragma omp parallel for schedule(dynamic, 16)
         for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             double wins = 0;
-            std::vector<NodePtr> policy_nodes;
-            policy_nodes.reserve(TProblem::MaxMoves);
-            // NOTE: copy of state is mandatory
-            TProblem state(cstate);
+            TProblem state(cstate); // NOTE: copy of state is mandatory
+            std::vector<NodePtr> policyNodes;
+
             // selection and expansion
-            NodePtr node = policy(subroot, state, idxAi, policy_nodes);
+            NodePtr node = policy(subroot, state, idxAi, policyNodes);
+
+            // rollout and backprop
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
                 rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, wins))
             { // rollout on gpu (if has gpu, is requested and gpu is free)
-                backprop(policy_nodes, wins, rolloutIter);
+                // NOTE: backprop one-by-one to decrease inconsistent increment in multithreading
+                wins /= rolloutIter; // cudaRollout returns the sum of wins
+                for (unsigned int j = 0; j < rolloutIter; ++j)
+                    backprop(policyNodes, wins);
             } else { // rollout on cpu (fallback)
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
-                    TProblem rstate(state);
+                    TProblem rstate(state); // NOTE: copy of state is mandatory
                     rollout(rstate, idxAi, maxRolloutDepth);
                     // backprop
                     wins = rstate.computeMCTSWin(idxAi);
-                    backprop(policy_nodes, wins);
-                    //backprop(catchup_nodes, wins);
+                    backprop(policyNodes, wins);
                 }
             }
         }

@@ -20,7 +20,7 @@
 
 //! Stores the state of the game that is known by all players and state of each player individually
 /*!
- * \details This class implements the function getPossibleCards for applying AI.
+ * \details This class implements the function getPossibleMoves for applying AI.
  *          This function returns those cards, which can be played in the next turn without breaking the rules.
  *          It can find cards for both opponent and for itself.
  *          Other functionalities are helping to simulate a game and to get the number of points at the end of the game.
@@ -34,6 +34,7 @@ class Hearts {
 public:
     typedef uint8 MoveType; //!< interface, dont edit until class uses it
     typedef uint8 MoveCounterType; //!< interface, dont edit until class uses it
+    constexpr static double UCT_C = 1.414213562; //!< interface, constant for exploration in uct formula
     constexpr static unsigned int MaxMoves = 52; //!< interface
     constexpr static unsigned int MaxChildPerNode = 39; //!< interface
 

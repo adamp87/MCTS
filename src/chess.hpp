@@ -52,6 +52,7 @@ public:
     };
 
     typedef std::uint_fast8_t MoveCounterType; //!< interface
+    constexpr static double UCT_C = 0.1; //!< interface, constant for exploration in uct formula
     constexpr static unsigned int MaxMoves = 218; //!< interface: https://chess.stackexchange.com/questions/4490/maximum-possible-movement-in-a-turn
     constexpr static unsigned int MaxChildPerNode = MaxMoves; //!< interface
 
