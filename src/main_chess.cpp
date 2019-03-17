@@ -10,6 +10,7 @@
 #include "mcts.cuh"
 #include "mctree.hpp"
 #include "chess.hpp"
+#include "mcts_debug.hpp"
 
 #ifdef __linux__
 #include <ctime>
@@ -34,6 +35,9 @@ static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::Mo
 #else
 typedef MCTreeStaticArray<Chess::MoveType, Chess::MaxChildPerNode> TreeContainer;
 #endif
+
+typedef MCTS_Policy_Debug PolicyDebug;
+//typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
 Chess::MoveType getCmdInput(const Chess& state, int player) {
     bool valid = false;
@@ -148,7 +152,8 @@ int main(int argc, char** argv) {
     std::srand(seed);
     Chess state;
     std::vector<Chess::MoveType> history;
-    std::array<MCTS<TreeContainer, Chess>, 2> ai;
+    PolicyDebug policyDebug(writeTree, workDir, seed);
+    std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai;
     if (!state.test_moves()) {
         std::cout << "Error in logic" << std::endl;
         return -1;
@@ -174,7 +179,8 @@ int main(int argc, char** argv) {
                                                   policyIter[player],
                                                   rolloutIter[player],
                                                   history,
-                                                  rolloutCuda.get());
+                                                  rolloutCuda.get(),
+                                                  policyDebug);
         std::string moveDesc = state.getMoveDescription(move);
         state.update(move);
         history.push_back(move);

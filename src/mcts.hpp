@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "mcts.cuh"
+#include "mcts_debug.hpp"
 
 //! Monte Carlo tree search to apply AI
 /*!
@@ -23,8 +24,9 @@
  *          This is not documented, but the MCTreeDynamic class is the easiest to understand the interface.
  * \author adamp87
 */
-template <class TTree, class TProblem>
+template <class TTree, class TProblem, class TPolicyDebug>
 class MCTS : public TTree {
+    friend TPolicyDebug;
     typedef typename TTree::Node Node;
     typedef typename TTree::NodePtr NodePtr;
     typedef typename Node::CountType CountType;
@@ -193,7 +195,8 @@ public:
                      unsigned int policyIter,
                      unsigned int rolloutIter,
                      const std::vector<MoveType>& history,
-                     RolloutCUDA<TProblem>* rollloutCuda)
+                     RolloutCUDA<TProblem>* rollloutCuda,
+                     TPolicyDebug& policyDebug)
     {
         // walk tree according to history
         NodePtr subroot = catchup(cstate, history);
@@ -213,6 +216,7 @@ public:
 
             // selection and expansion
             NodePtr node = policy(subroot, state, idxAi, policyNodes);
+            policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, i, history.size());
 
             // rollout and backprop
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
@@ -264,6 +268,8 @@ public:
     template <typename T>
     void writeResults(const TProblem& state, int idxAi, float maxIter, const std::vector<MoveType>& history, T& stream) {
         stream << "Branch;ID;ParentID;Time;Move;Opponent;Select;Visit;Win";
+        stream << std::endl;
+        stream << "0;0;0;0;ROOT;0;0;0;0";
         stream << std::endl;
 
         NodePtr parent = TTree::getRoot();

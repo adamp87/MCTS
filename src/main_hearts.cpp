@@ -10,6 +10,7 @@
 #include "mcts.cuh"
 #include "mctree.hpp"
 #include "hearts.hpp"
+#include "mcts_debug.hpp"
 
 #ifdef __linux__
 #include <ctime>
@@ -34,6 +35,9 @@ static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<uint8> > 
 #else
 typedef MCTreeStaticArray<uint8, Hearts::MaxChildPerNode> TreeContainer;
 #endif
+
+//typedef MCTS_Policy_Debug PolicyDebug;
+typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
 int main(int argc, char** argv) {
     int cheat = 0;
@@ -105,7 +109,8 @@ int main(int argc, char** argv) {
     std::srand(seed);
     Hearts state(cheat != 0);
     std::vector<Hearts::MoveType> history;
-    std::array<MCTS<TreeContainer, Hearts>, 4> ai;
+    PolicyDebug policyDebug(writeTree, workDir, seed);
+    std::array<MCTS<TreeContainer, Hearts, PolicyDebug>, 4> ai;
 
     // int cuda rollout
     std::unique_ptr<RolloutCUDA<Hearts> > rolloutCuda(new RolloutCUDA<Hearts>(rolloutIter, seed));
@@ -134,7 +139,14 @@ int main(int argc, char** argv) {
         std::cout << "R" << round + 1 << " ";
         for (uint8 turn = 0; turn < 4; ++turn) {
             int player = state.getPlayer(round * 4 + turn);
-            uint8 card = ai[player].execute(player, 0, state, policyIter[player], rolloutIter[player], history, rolloutCuda.get());
+            uint8 card = ai[player].execute(player,
+                                            0,
+                                            state,
+                                            policyIter[player],
+                                            rolloutIter[player],
+                                            history,
+                                            rolloutCuda.get(),
+                                            policyDebug);
             state.update(card);
             history.push_back(card);
 
