@@ -77,6 +77,13 @@ RolloutCUDA<TProblem>::RolloutCUDA(unsigned int* iterations, unsigned int seed) 
         std::cout << "No CUDA device found" << std::endl;
         return;
     }
+    for (int i = 0; i < deviceCount; ++i) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        if (i == 0)
+            std::cout << "Selected ";
+        std::cout << "Device number: " << i << " Device name: " << prop.name << std::endl;
+    }
 
     unsigned int maxIterations = iterations[0];
     for (int i = 0; i < 4; ++i) {
