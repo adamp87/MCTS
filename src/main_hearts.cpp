@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
     int cheat = 0;
     int writeTree = 0;
     std::string workDir = "";
+    auto timestamp = std::time(0);
     unsigned int seed = getSeed();
     unsigned int policyIter[4] = {100, 1000, 10000, 100000};
     unsigned int rolloutIter[4] = {1, 1, 1, 1};
@@ -109,7 +110,7 @@ int main(int argc, char** argv) {
     std::srand(seed);
     Hearts state(cheat != 0);
     std::vector<Hearts::MoveType> history;
-    PolicyDebug policyDebug(writeTree, workDir, seed);
+    PolicyDebug policyDebug(writeTree, workDir, "hearts", timestamp);
     std::array<MCTS<TreeContainer, Hearts, PolicyDebug>, 4> ai;
 
     // int cuda rollout
@@ -170,7 +171,7 @@ int main(int argc, char** argv) {
 
         std::ofstream file;
         std::stringstream filename;
-        filename << workDir << "seed_" << seed << "_player_" << p << ".csv";
+        filename << workDir << "hearts_" << timestamp << "_player_" << p << ".csv";
 
         file.open(filename.str());
         float maxIter = float(policyIter[p] * rolloutIter[p]);

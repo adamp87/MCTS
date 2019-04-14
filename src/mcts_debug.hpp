@@ -9,7 +9,7 @@
 
 class MCTS_Policy_Debug_Dummy {
 public:
-    MCTS_Policy_Debug_Dummy(bool writeTree, const std::string&, int) {
+    MCTS_Policy_Debug_Dummy(bool writeTree, const std::string&, const std::string&, int) {
         if (writeTree)
             std::cout << "Warning: PolicyDebug was not compiled" << std::endl;
     }
@@ -33,10 +33,12 @@ private:
     std::ofstream policyTrace;
 
 public:
-    MCTS_Policy_Debug(bool writeTree, const std::string& workDir, int seed) {
+    MCTS_Policy_Debug(bool writeTree, const std::string& workDir, const std::string& prog, int timestamp) {
         this->writeTree = writeTree;
+        if (!writeTree)
+            return;
         std::stringstream filename;
-        filename << workDir << "seed_" << seed << "_policy.csv";
+        filename << workDir << prog << "_" << timestamp << "_policy.csv";
         policyTrace.open(filename.str());
         policyTrace << "NodeID;ParentID;Depth;Time;Move;Iter;Win;Visit;SubRootVisit;Value;" << std::endl;
     }
@@ -56,26 +58,32 @@ public:
     {
         if (!writeTree)
             return;
-        std::lock_guard<std::mutex> lock(mutex); (void)lock;
+        std::stringstream txt;
         TProblem state(cstate);
         NodePtr parent = policyNodes[0];
-        for (unsigned int depth = 0; depth < policyNodes.size(); ++depth) {
+        for (unsigned int depth = 1; depth < policyNodes.size(); ++depth) {
+            //NOTE: must start from 1, 0 is the subroot and it should not be used to update
             NodePtr node = policyNodes[depth];
 
             double value = tree.value(node, log(static_cast<double>(subRoot->visits)), state.getPlayer() != idxAi, TProblem::UCT_C);
             state.update(node->move);
-            policyTrace << tree.getNodeId(node) << ";";
-            policyTrace << tree.getNodeId(parent) << ";";
-            policyTrace << depth << ";";
-            policyTrace << time << ";";
-            policyTrace << TProblem::move2str(node->move) << ";";
-            policyTrace << iteration_i << ";";
-            policyTrace << node->wins << ";";
-            policyTrace << node->visits << ";";
-            policyTrace << subRoot->visits << ";";
-            policyTrace << value << ";";
-            policyTrace << std::endl;
+            txt << tree.getNodeId(node) << ";";
+            txt << tree.getNodeId(parent) << ";";
+            txt << depth << ";";
+            txt << time << ";";
+            txt << TProblem::move2str(node->move) << ";";
+            txt << iteration_i << ";";
+            txt << node->wins << ";";
+            txt << node->visits << ";";
+            txt << subRoot->visits << ";";
+            txt << value << ";";
+            txt << std::endl;
             parent = node;
+        }
+
+        { // thread-safe scope
+            std::lock_guard<std::mutex> lock(mutex); (void)lock;
+            policyTrace << txt.str();
         }
     }
 };

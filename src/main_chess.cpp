@@ -1,5 +1,6 @@
 #include <array>
 #include <random>
+#include <chrono>
 
 #include <string>
 #include <sstream>
@@ -95,6 +96,7 @@ int main(int argc, char** argv) {
     int writeTree = 0;
     int maxRolloutDepth = 8;
     std::string workDir = "";
+    auto timestamp = std::time(0);
     unsigned int seed = getSeed();
     unsigned int policyIter[2] = {5000, 25000};
     unsigned int rolloutIter[2] = {1, 1};
@@ -152,7 +154,7 @@ int main(int argc, char** argv) {
     std::srand(seed);
     Chess state;
     std::vector<Chess::MoveType> history;
-    PolicyDebug policyDebug(writeTree, workDir, seed);
+    PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
     std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai;
     if (!state.test_moves()) {
         std::cout << "Error in logic" << std::endl;
@@ -171,6 +173,7 @@ int main(int argc, char** argv) {
     // execute game
     for (int time = 0; !state.isFinished(); ++time) {
         int player = state.getPlayer(time);
+        auto t0 = std::chrono::high_resolution_clock::now();
         Chess::MoveType move = (policyIter[player] == 0)  ?
                                getCmdInput(state, player) :
                                ai[player].execute(player,
@@ -181,15 +184,17 @@ int main(int argc, char** argv) {
                                                   history,
                                                   rolloutCuda.get(),
                                                   policyDebug);
+        auto t1 = std::chrono::high_resolution_clock::now();
         std::string moveDesc = state.getMoveDescription(move);
         state.update(move);
         history.push_back(move);
 
-        std::cout << "T" << time + 1 << " ";
+        std::cout << "T" << time << " ";
         std::cout << "P" << int(player) << " ";
         std::cout << Chess::move2str(move) << " ";
         std::cout << moveDesc << " ";
-        std::cout << state.getBoardDescription();
+        std::cout << state.getBoardDescription() << " ";
+        std::cout << std::chrono::duration_cast<std::chrono::seconds>(t1-t0).count() << " sec";
         std::cout << std::endl;
     }
 
@@ -200,7 +205,7 @@ int main(int argc, char** argv) {
 
         std::ofstream file;
         std::stringstream filename;
-        filename << workDir << "seed_" << seed << "_player_" << p << ".csv";
+        filename << workDir << "chess_" << timestamp << "_player_" << p << ".csv";
 
         file.open(filename.str());
         float maxIter = float(policyIter[p] * rolloutIter[p]);
