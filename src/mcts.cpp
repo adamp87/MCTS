@@ -2,8 +2,12 @@
 
 class Chess;
 class Hearts;
+class TSP_Edge;
+class TSP_Vertex;
 template class RolloutCUDA<Chess>;
 template class RolloutCUDA<Hearts>;
+template class RolloutCUDA<TSP_Edge>;
+template class RolloutCUDA<TSP_Vertex>;
 
 // dummy functions for CPU compilation
 template <typename TProblem>

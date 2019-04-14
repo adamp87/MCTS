@@ -5,6 +5,9 @@ find_package(CUDA QUIET)
 
 set(CMAKE_CXX_STANDARD 11)
 
+add_executable("TSP" src/mcts.cpp
+                     src/main_tsp.cpp)
+
 add_executable("Chess" src/mcts.cpp
                        src/main_chess.cpp)
 
