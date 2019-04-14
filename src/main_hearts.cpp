@@ -39,6 +39,8 @@ typedef MCTreeStaticArray<uint8, Hearts::MaxChildPerNode> TreeContainer;
 //typedef MCTS_Policy_Debug PolicyDebug;
 typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
+MovesOOC::TmpFile MovesOOC::tmp;
+
 int main(int argc, char** argv) {
     int cheat = 0;
     int writeTree = 0;

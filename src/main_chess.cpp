@@ -40,6 +40,8 @@ typedef MCTreeStaticArray<Chess::MoveType, Chess::MaxChildPerNode> TreeContainer
 typedef MCTS_Policy_Debug PolicyDebug;
 //typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
+MovesOOC::TmpFile MovesOOC::tmp;
+
 Chess::MoveType getCmdInput(const Chess& state, int player) {
     bool valid = false;
     Chess::MoveType move;

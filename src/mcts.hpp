@@ -63,7 +63,27 @@ private:
         MoveType moves[TProblem::MaxMoves];
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isFinished()) {
-            // get possible moves
+#if 1 // compute possible moves once and store in container
+            { // thread-safe scope
+                LockGuard guard(*node); (void)guard;
+                if (node->nexts.isUnset()) { // get possible moves
+                    MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
+                    std::random_shuffle(moves, moves+nMoves);
+                    node->nexts.init(moves, nMoves);
+                    //node->nexts.test(moves, nMoves);
+                }
+                if (!node->nexts.isEmpty()) { // node is not fully expanded
+                    MoveType move;
+                    node->nexts.next(&move);
+                    state.update(move);
+                    // create child
+                    node = TTree::addNode(node, move);
+                    visited_nodes.push_back(node);
+                    return node;
+                }
+            } // end of thread-safe scope
+
+#else // compute possibleMoves every iter, remove duplicates
             MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
 
             { // thread-safe scope
@@ -90,7 +110,7 @@ private:
                     return node;
                 }
             } // end of thread-safe scope
-
+#endif
             // node fully expanded
             // set node to best leaf
             NodePtr best = node; // init
