@@ -61,7 +61,7 @@ private:
         enum Type { Unset=0, Pawn=1, Knight=2, Bishop=3, Rook=4, Queen=5, King=6 };
         Type type;
         int playerIdx;
-        std::int_fast16_t movedCount;
+        std::int_fast16_t firstMoved;
 
         Figure() : type(Unset) { }
     };
@@ -95,12 +95,12 @@ public:
             figures[7+16*idxAi].posX = 5;
             figures[7+16*idxAi].type = Figure::Bishop;
             for (int i = 0; i < 8; ++i) {
-                figures[i+16*idxAi].movedCount = 0;
+                figures[i+16*idxAi].firstMoved = 0;
                 figures[i+16*idxAi].playerIdx = idxAi;
                 figures[i+16*idxAi].posY = idxAi==0?0:7;
             }
             for(int i = 0; i < 8; ++i) {
-                figures[i+8+16*idxAi].movedCount = 0;
+                figures[i+8+16*idxAi].firstMoved = 0;
                 figures[i+8+16*idxAi].playerIdx = idxAi;
                 figures[i+8+16*idxAi].posX = i;
                 figures[i+8+16*idxAi].posY = idxAi==0?1:6;
@@ -141,7 +141,7 @@ public:
         auto isInsideBoard = [&] (int x, int y, int dx, int dy) -> bool { int xx=x+dx; int yy=y+dy; return 0<=xx && xx<8 && 0<=yy && yy<8; };
         auto isFree = [&] (int x, int y, int dx, int dy) -> bool { return isInsideBoard(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Unset; };
         auto isOpponent = [&] (int x, int y, int dx, int dy) -> bool { return isInsideBoard(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type != Figure::Unset && board[getPos(x,y,dx,dy)].playerIdx != idxAi; };
-        auto isEnPassant = [&] (int x, int y, int dx, int dy) -> bool { return isOpponent(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Pawn && board[getPos(x,y,dx,dy)].movedCount == 1; };
+        auto isEnPassant = [&] (int x, int y, int dx, int dy) -> bool { return isOpponent(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Pawn && board[getPos(x,y,dx,dy)].firstMoved == time; };
 
         auto isKingInCheck = [&] (int x, int y, int dx, int dy, MoveType::Type type=MoveType::Normal) -> bool {
             if (!checkKing)
@@ -194,16 +194,16 @@ public:
         };
 
         auto castlingL = [&] (int x, int y) -> bool {
-            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].movedCount != 0;
-            bool isRookMoved = figures[idxAi*16+2].type != Figure::Rook || figures[idxAi*16+2].movedCount != 0;
+            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].firstMoved != 0;
+            bool isRookMoved = figures[idxAi*16+2].type != Figure::Rook || figures[idxAi*16+2].firstMoved != 0;
             return (!isKingMoved && !isRookMoved &&
                     isFree(x, y, -1, 0) && isFree(x, y, -2, 0) && isFree(x, y, -3, 0) &&
                     !isKingInCheck(x, y, 0, 0) && !isKingInCheck(x, y, -1, 0) && !isKingInCheck(x, y, -2, 0));
         };
 
         auto castlingR = [&] (int x, int y) -> bool {
-            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].movedCount != 0;
-            bool isRookMoved = figures[idxAi*16+3].type != Figure::Rook || figures[idxAi*16+3].movedCount != 0;
+            bool isKingMoved = figures[idxAi*16  ].type != Figure::King || figures[idxAi*16  ].firstMoved != 0;
+            bool isRookMoved = figures[idxAi*16+3].type != Figure::Rook || figures[idxAi*16+3].firstMoved != 0;
             return (!isKingMoved && !isRookMoved &&
                     isFree(x, y, +1, 0) && isFree(x, y, +2, 0) &&
                     !isKingInCheck(x, y, 0, 0) && !isKingInCheck(x, y, +1, 0) && !isKingInCheck(x, y, +2, 0));
@@ -315,7 +315,8 @@ public:
             if (figures[i].type != Figure::Unset && figures[i].posX == move.fromX && figures[i].posY == move.fromY) {
                 figures[i].posX = move.toX;
                 figures[i].posY = move.toY;
-                figures[i].movedCount += 1;
+                if (figures[i].firstMoved == 0)
+                    figures[i].firstMoved = time+1;
                 for(int i = idxOp*16; i < 16*(idxOp+1); ++i) { // remove opponent figure
                     if (figures[i].posX == move.toX && figures[i].posY == move.toY) {
                         figures[i].type = Figure::Unset;
@@ -327,7 +328,7 @@ public:
                 case MoveType::Castling:
                     // move rook
                     figures[idxAi*16+((move.toX<move.fromX)?2:3)].posX = move.toX+((move.toX<move.fromX)?1:-1);
-                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].movedCount += 1;
+                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].firstMoved = time+1;
                     break;
                 case MoveType::EnPassant:
                     for(int i = idxOp*16+8; i < 16*(idxOp+1); ++i) { // remove opponent pawn
@@ -427,24 +428,25 @@ public:
         for(int i = 0; i < 32; ++i) {
             chess.figures[i].type = Figure::Unset;
         }
+        chess.time = 2;
         chess.figures[0].type = Figure::King;
         chess.figures[2].type = Figure::Rook;
         chess.figures[3].type = Figure::Rook;
-        chess.figures[3].movedCount = 1;
+        chess.figures[3].firstMoved = 1;
         chess.figures[8].type = Figure::Pawn;
         chess.figures[8].posY = 4;
-        chess.figures[8].movedCount = 1;
+        chess.figures[8].firstMoved = 1;
         chess.figures[8+7].type = Figure::Pawn;
         chess.figures[8+7].posX = 6;
         chess.figures[8+7].posY = 6;
-        chess.figures[8+7].movedCount = 1;
+        chess.figures[8+7].firstMoved = 1;
         chess.figures[16].type = Figure::King;
         chess.figures[16+3].type = Figure::Rook;
-        chess.figures[16+3].movedCount = 1;
+        chess.figures[16+3].firstMoved = 1;
         chess.figures[16+8+4].type = Figure::Pawn;
         chess.figures[16+8+4].posX = 1;
         chess.figures[16+8+4].posY = 4;
-        chess.figures[16+8+4].movedCount = 1;
+        chess.figures[16+8+4].firstMoved = 2;
         MoveType moves[Chess::MaxMoves];
         MoveCounterType nMoves = chess.getPossibleMoves(0, 0, moves);
 
