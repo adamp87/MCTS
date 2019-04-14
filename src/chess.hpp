@@ -418,8 +418,8 @@ public:
     }
 
     ///! Interface, convert move to string
-    static std::string move2str(MoveType& card) {
-        return static_cast<std::string>(card);
+    static std::string move2str(MoveType& move) {
+        return static_cast<std::string>(move);
     }
 
     ///! Test function

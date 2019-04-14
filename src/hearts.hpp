@@ -377,14 +377,14 @@ public:
     }
 
     ///! Interface, convert move to string
-    static std::string move2str(uint8 card) {
+    static std::string move2str(uint8 move) {
         const char colors[] = {'C', 'D', 'S', 'H'};
         const char values[] = {'2', '3', '4', '5', '6', '7',
                                '8', '9', '0', 'J', 'Q', 'K', 'A'};
 
         std::string str("XX");
-        str[0] = colors[card / 13];
-        str[1] = values[card % 13];
+        str[0] = colors[move / 13];
+        str[1] = values[move % 13];
         return str;
     }
 };
