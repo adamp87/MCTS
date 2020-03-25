@@ -143,7 +143,7 @@ __host__ bool RolloutCUDA<TProblem>::cuRollout(int idxAi,
                                                int maxRolloutDepth,
                                                const TProblem& state,
                                                unsigned int iterations,
-                                               double& winSum) const {
+                                               double& W) const {
     std::unique_lock<std::mutex> lock(pimpl->lock, std::defer_lock);
     if (lock.try_lock() == false)
         return false;
@@ -160,6 +160,7 @@ __host__ bool RolloutCUDA<TProblem>::cuRollout(int idxAi,
         return false;
     }
 
-    winSum = std::accumulate(pimpl->u_result, pimpl->u_result + iterations, 0.0);
+    W = std::accumulate(pimpl->u_result, pimpl->u_result + iterations, 0.0);
+    W /= iterations;
     return true;
 }

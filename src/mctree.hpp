@@ -19,12 +19,13 @@ struct MCTSNodeBase {
         LockGuard(MCTSNodeBase<T_Act>&) {}
     };
 
-    CountType   N;      //!< node visit count
-    double      W;      //!< number of wins
-    T_Act       action; //!< e.g. card played out
+    CountType   N;      //!< state visit count
+    double      W;      //!< total value of state
+    double      P;      //!< prior probability to select action
+    T_Act       action; //!< action that takes to state, e.g. card played out
 
     MCTSNodeBase(const T_Act& action)
-        : N(0), W(0.0), action(action)
+        : N(0), W(0.0), P(0.0), action(action)
     { }
 };
 
@@ -58,13 +59,14 @@ struct MCTSNodeBaseMT {
         }
     };
 
-    std::atomic<CountType>  N;      //!< node visit count
-    MyAtomicDouble          W;      //!< number of wins for each points
-    T_Act                   action; //!< e.g. card played out
+    std::atomic<CountType>  N;      //!< state visit count
+    MyAtomicDouble          W;      //!< total value of state
+    double                  P;      //!< prior probability to select action
+    T_Act                   action; //!< action that takes to state, e.g. card played out
     std::mutex              lock;   //!< mutex for thread-safe policy
 
     MCTSNodeBaseMT(const T_Act& action)
-        : N(0), W(0.0), action(action)
+        : N(0), P(0.0), action(action)
     { }
 };
 

@@ -109,8 +109,15 @@ public:
         tour[visitedCount++] = action;
     }
 
+    //! Interface, Compute W and P values for MCTS
+    CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType*, ActCounterType nActions, double* P, double& W) const {
+        for (ActCounterType i = 0; i < nActions; ++i)
+            P[i] = 0;
+        W = computeMCTS_W(idxAi);
+    }
+
     //! Interface, Compute win value for MCTreeSearch, between 0-1
-    CUDA_CALLABLE_MEMBER double computeMCTSWin(int) const {
+    CUDA_CALLABLE_MEMBER double computeMCTS_W(int) const {
         double sum = getTourLength();
         //double win = 1.0-exp((sum-lb)/(ub-lb)); //exponential
         double win = (ub-sum)/(ub-lb); // linear

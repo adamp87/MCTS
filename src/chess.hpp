@@ -362,8 +362,16 @@ public:
         ++time;
     }
 
+    //! Interface, Compute W and P values for MCTS
+    CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType* actions, ActCounterType nActions, double* P, double& W) const {
+        (void)actions;
+        for (ActCounterType i = 0; i < nActions; ++i)
+            P[i] = 0;
+        W = computeMCTS_W(idxAi);
+    }
+
     //! Interface, Compute win value for MCTreeSearch, between 0-1
-    CUDA_CALLABLE_MEMBER double computeMCTSWin(int idxAi) const {
+    CUDA_CALLABLE_MEMBER double computeMCTS_W(int idxAi) const {
         const double figureValue[] = {0.0, 1.0, 3.0, 3.0, 5.0, 9.0, 4.0};
         double aiWin = 0.0;
         double opWin = 0.0;

@@ -24,7 +24,7 @@ public:
                    int maxRolloutDepth,
                    const TProblem& state,
                    unsigned int iteration,
-                   double& winSum) const;
+                   double& W) const;
 };
 
 #endif // MCTS_CUH

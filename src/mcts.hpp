@@ -60,37 +60,28 @@ private:
     //! Applies the policy step of the Tree Search
     NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = subRoot;
-        ActType actions[TProblem::MaxActions];
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isFinished()) {
-#if 1  // compute possibleMoves every iter, remove duplicates
-            ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
 
-            { // thread-safe scope
-                LockGuard guard(*node); (void)guard;
-                auto it = TTree::getChildIterator(node);
-                while (it.hasNext()) { // remove moves that already have been expanded
-                    NodePtr child = it.next();
-                    auto it = std::find(actions, actions + nActions, child->action);
-                    if (it != actions + nActions) {
-                        //moves.erase(it);
-                        --nActions;
-                        *it = actions[nActions];
+            if (node->N == 0) { // leaf node
+                LockGuard guard(*node); (void)guard; // thread-safe scope
+                if (node->N == 0) { // leaf node
+                    double W;
+                    double P[TProblem::MaxActions];
+                    ActType actions[TProblem::MaxActions];
+
+                    ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
+                    state.computeMCTS_WP(state.getPlayer(), actions, nActions, P, W);
+                    for (ActCounterType i = 0; i < nActions; ++i) { // add all child nodes as leaf nodes
+                        NodePtr n = TTree::addNode(node, actions[i]);
+                        n->P = P[i];
                     }
-                }
-                if (nActions != 0) { // node is not fully expanded
-                    // expand
-                    // select move and update
-                    ActCounterType pick = static_cast<ActCounterType>(rand() % nActions);
-                    ActType action = actions[pick];
-                    state.update(action);
-                    // create child
-                    node = TTree::addNode(node, action);
-                    visited_nodes.push_back(node);
+                    node->W += W;
+                    node->N = 1; // keep last
                     return node;
                 }
-            } // end of thread-safe scope
-#endif
+            }
+
             // node fully expanded
             // set node to best leaf
             NodePtr best = node; // init
@@ -210,7 +201,7 @@ public:
 
         #pragma omp parallel for schedule(dynamic, 16)
         for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
-            double wins = 0;
+            double W = 0;
             TProblem state(cstate); // NOTE: copy of state is mandatory
             std::vector<NodePtr> policyNodes;
 
@@ -218,21 +209,28 @@ public:
             NodePtr node = policy(subroot, state, idxAi, policyNodes);
             policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, i, history.size());
 
+            // backpropagation of policy node
+            W = node->W;
+            policyNodes.pop_back();
+            backprop(policyNodes, W);
+            if (rolloutIter == 0)
+                continue; // no random rollout
+
+            policyNodes.push_back(node);
             // rollout and backprop
             if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, wins))
-            { // rollout on gpu (if has gpu, is requested and gpu is free)
+                rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, W))
+            { // rollout on gpu (if has gpu and requested, execute if gpu is free)
                 // NOTE: backprop one-by-one to decrease inconsistent increment in multithreading
-                wins /= rolloutIter; // cudaRollout returns the sum of wins
                 for (unsigned int j = 0; j < rolloutIter; ++j)
-                    backprop(policyNodes, wins);
+                    backprop(policyNodes, W);
             } else { // rollout on cpu (fallback)
                 for (unsigned int j = 0; j < rolloutIter; ++j) {
                     TProblem rstate(state); // NOTE: copy of state is mandatory
                     rollout(rstate, idxAi, maxRolloutDepth);
                     // backprop
-                    wins = rstate.computeMCTSWin(idxAi);
-                    backprop(policyNodes, wins);
+                    W = rstate.computeMCTS_W(idxAi);
+                    backprop(policyNodes, W);
                 }
             }
         }

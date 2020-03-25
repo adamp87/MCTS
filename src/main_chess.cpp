@@ -37,8 +37,8 @@ static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::Ac
 typedef MCTreeStaticArray<Chess::ActType, Chess::MaxChildPerNode> TreeContainer;
 #endif
 
-typedef MCTS_Policy_Debug PolicyDebug;
-//typedef MCTS_Policy_Debug_Dummy PolicyDebug;
+//typedef MCTS_Policy_Debug PolicyDebug;
+typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
 Chess::ActType getCmdInput(const Chess& state, int player) {
     bool valid = false;
