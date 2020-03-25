@@ -71,7 +71,7 @@ private:
                     ActType actions[TProblem::MaxActions];
 
                     ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
-                    state.computeMCTS_WP(state.getPlayer(), actions, nActions, P, W);
+                    state.computeMCTS_WP(idxAi, actions, nActions, P, W);
                     for (ActCounterType i = 0; i < nActions; ++i) { // add all child nodes as leaf nodes
                         NodePtr n = TTree::addNode(node, actions[i]);
                         n->P = P[i];
