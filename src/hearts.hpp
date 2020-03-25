@@ -20,7 +20,7 @@
 
 //! Stores the state of the game that is known by all players and state of each player individually
 /*!
- * \details This class implements the function getPossibleMoves for applying AI.
+ * \details This class implements the function getPossibleActions for applying AI.
  *          This function returns those cards, which can be played in the next turn without breaking the rules.
  *          It can find cards for both opponent and for itself.
  *          Other functionalities are helping to simulate a game and to get the number of points at the end of the game.
@@ -32,10 +32,10 @@
 */
 class Hearts {
 public:
-    typedef uint8 MoveType; //!< interface, dont edit until class uses it
-    typedef uint8 MoveCounterType; //!< interface, dont edit until class uses it
+    typedef uint8 ActType; //!< interface, dont edit until class uses it
+    typedef uint8 ActCounterType; //!< interface, dont edit until class uses it
     constexpr static double UCT_C = 1.414213562; //!< interface, constant for exploration in uct formula
-    constexpr static unsigned int MaxMoves = 52; //!< interface
+    constexpr static unsigned int MaxActions = 52; //!< interface
     constexpr static unsigned int MaxChildPerNode = 39; //!< interface
 
 private:
@@ -162,12 +162,12 @@ public:
     //! Interface, Implements game logic, return the possible cards that idxAi can play
     /*!
     * \param idxMe ID of player who executes function
-    * \param idxAi ID of player to get possible moves for
-    * \param cards Allocated array to store possible moves
-    * \return Number of possible moves
+    * \param idxAi ID of player to get possible actions for
+    * \param cards Allocated array to store possible actions
+    * \return Number of possible actions
     * \note Using hands[idxAi] is hard-coded cheating
     */
-    CUDA_CALLABLE_MEMBER uint8 getPossibleMoves(int idxMe, int idxAi, uint8* cards) const {
+    CUDA_CALLABLE_MEMBER uint8 getPossibleActions(int idxMe, int idxAi, uint8* cards) const {
         uint8 count = 0;
         uint8 colorFirst = orderInTime[round * 4] / 13; //note, must check if not first run
 
@@ -376,15 +376,15 @@ public:
         return hands[idxAi][card] == idxAi;
     }
 
-    ///! Interface, convert move to string
-    static std::string move2str(uint8 move) {
+    ///! Interface, convert action to string
+    static std::string act2str(uint8 act) {
         const char colors[] = {'C', 'D', 'S', 'H'};
         const char values[] = {'2', '3', '4', '5', '6', '7',
                                '8', '9', '0', 'J', 'Q', 'K', 'A'};
 
         std::string str("XX");
-        str[0] = colors[move / 13];
-        str[1] = values[move % 13];
+        str[0] = colors[act / 13];
+        str[1] = values[act % 13];
         return str;
     }
 };

@@ -40,7 +40,7 @@ public:
         std::stringstream filename;
         filename << workDir << prog << "_" << timestamp << "_policy.csv";
         policyTrace.open(filename.str());
-        policyTrace << "NodeID;ParentID;Depth;Time;Move;Iter;Win;Visit;SubRootVisit;Value;" << std::endl;
+        policyTrace << "NodeID;ParentID;Depth;Time;Action;Iter;Win;Visit;SubRootVisit;Value;" << std::endl;
     }
 
     ~MCTS_Policy_Debug() {
@@ -65,17 +65,17 @@ public:
             //NOTE: must start from 1, 0 is the subroot and it should not be used to update
             NodePtr node = policyNodes[depth];
 
-            double value = tree.value(node, log(static_cast<double>(subRoot->visits)), state.getPlayer() != idxAi, TProblem::UCT_C);
-            state.update(node->move);
+            double value = tree.value(node, log(static_cast<double>(subRoot->N)), state.getPlayer() != idxAi, TProblem::UCT_C);
+            state.update(node->action);
             txt << tree.getNodeId(node) << ";";
             txt << tree.getNodeId(parent) << ";";
             txt << depth << ";";
             txt << time << ";";
-            txt << TProblem::move2str(node->move) << ";";
+            txt << TProblem::act2str(node->action) << ";";
             txt << iteration_i << ";";
-            txt << node->wins << ";";
-            txt << node->visits << ";";
-            txt << subRoot->visits << ";";
+            txt << node->W << ";";
+            txt << node->N << ";";
+            txt << subRoot->N << ";";
             txt << value << ";";
             txt << std::endl;
             parent = node;

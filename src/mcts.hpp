@@ -31,12 +31,12 @@ class MCTS : public TTree {
     typedef typename TTree::NodePtr NodePtr;
     typedef typename Node::CountType CountType;
     typedef typename Node::LockGuard LockGuard;
-    typedef typename TProblem::MoveType MoveType;
-    typedef typename TProblem::MoveCounterType MoveCounterType;
+    typedef typename TProblem::ActType ActType;
+    typedef typename TProblem::ActCounterType ActCounterType;
 
 private:
     //! Walk the tree according to the history of the problem
-    NodePtr catchup(const TProblem& state, const std::vector<MoveType>& history) {
+    NodePtr catchup(const TProblem& state, const std::vector<ActType>& history) {
         NodePtr node = TTree::getRoot();
 
         for (size_t time = 0; time < history.size(); ++time) {
@@ -44,7 +44,7 @@ private:
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                if (child->move == history[time]) {
+                if (child->action == history[time]) {
                     node = child;
                     found = true;
                     break;
@@ -60,52 +60,52 @@ private:
     //! Applies the policy step of the Tree Search
     NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = subRoot;
-        MoveType moves[TProblem::MaxMoves];
+        ActType actions[TProblem::MaxActions];
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isFinished()) {
 #if 1 // compute possible moves once and store in container
             { // thread-safe scope
                 LockGuard guard(*node); (void)guard;
                 if (node->nexts.isUnset()) { // get possible moves
-                    MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
-                    std::random_shuffle(moves, moves+nMoves);
-                    node->nexts.init(moves, nMoves);
-                    //node->nexts.test(moves, nMoves);
+                    ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
+                    std::random_shuffle(actions, actions+nActions);
+                    node->nexts.init(actions, nActions);
+                    //node->nexts.test(actions, nActions);
                 }
                 if (!node->nexts.isEmpty()) { // node is not fully expanded
-                    MoveType move;
-                    node->nexts.next(&move);
-                    state.update(move);
+                    ActType action;
+                    node->nexts.next(&action);
+                    state.update(action);
                     // create child
-                    node = TTree::addNode(node, move);
+                    node = TTree::addNode(node, action);
                     visited_nodes.push_back(node);
                     return node;
                 }
             } // end of thread-safe scope
 
 #else // compute possibleMoves every iter, remove duplicates
-            MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
+            ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
 
             { // thread-safe scope
                 LockGuard guard(*node); (void)guard;
                 auto it = TTree::getChildIterator(node);
                 while (it.hasNext()) { // remove moves that already have been expanded
                     NodePtr child = it.next();
-                    auto it = std::find(moves, moves + nMoves, child->move);
-                    if (it != moves + nMoves) {
+                    auto it = std::find(actions, actions + nActions, child->action);
+                    if (it != actions + nActions) {
                         //moves.erase(it);
-                        --nMoves;
-                        *it = moves[nMoves];
+                        --nActions;
+                        *it = actions[nActions];
                     }
                 }
-                if (nMoves != 0) { // node is not fully expanded
+                if (nActions != 0) { // node is not fully expanded
                     // expand
                     // select move and update
-                    MoveCounterType pick = static_cast<MoveCounterType>(rand() % nMoves);
-                    MoveType move = moves[pick];
-                    state.update(move);
+                    ActCounterType pick = static_cast<ActCounterType>(rand() % nActions);
+                    ActType action = actions[pick];
+                    state.update(action);
                     // create child
-                    node = TTree::addNode(node, move);
+                    node = TTree::addNode(node, action);
                     visited_nodes.push_back(node);
                     return node;
                 }
@@ -116,7 +116,7 @@ private:
             NodePtr best = node; // init
             double best_val = -std::numeric_limits<double>::max();
             // compute subRootVisit for each iteration, multithread
-            double subRootVisitLog = static_cast<double>(subRoot->visits);
+            double subRootVisitLog = static_cast<double>(subRoot->N);
             subRootVisitLog += std::numeric_limits<double>::epsilon(); // avoid log(0)
             subRootVisitLog = log(subRootVisitLog);
             auto it = TTree::getChildIterator(node);
@@ -130,7 +130,7 @@ private:
             }
             node = best;
             visited_nodes.push_back(node);
-            state.update(node->move);
+            state.update(node->action);
         }
         return node;
     }
@@ -138,32 +138,32 @@ private:
     //! Applies the rollout step of the Tree Search
     bool rollout(TProblem& state, int idxAi, int maxRolloutDepth) const {
         int depth = 0; //if max is zero, until finished
-        MoveType moves[TProblem::MaxMoves];
+        ActType actions[TProblem::MaxActions];
         while (!state.isFinished()) {
             if (++depth == maxRolloutDepth)
                 break;
-            MoveCounterType nMoves = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
-            MoveCounterType pick = static_cast<MoveCounterType>(rand() % nMoves);
-            state.update(moves[pick]);
+            ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
+            ActCounterType pick = static_cast<ActCounterType>(rand() % nActions);
+            state.update(actions[pick]);
         }
         return true;
     }
 
     //! Applies the backprop step of the Tree Search
-    void backprop(std::vector<NodePtr>& visited_nodes, double win) const {
+    void backprop(std::vector<NodePtr>& visited_nodes, double W) const {
         // backprop results to visited nodes
         for (auto it = visited_nodes.begin(); it != visited_nodes.end(); ++it) {
             Node& node = *(*it);
-            node.visits++;
-            node.wins += win;
+            node.N++;
+            node.W += W;
         }
     }
 
     //! Returns the value of a node for tree search evaluation
     double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent, double c) const {
         const Node& node = *_node;
-        double q = node.wins;
-        double n = static_cast<double>(node.visits);
+        double q = node.W;
+        double n = static_cast<double>(node.N);
         n += std::numeric_limits<double>::epsilon(); //avoid div by 0
 
         if (isOpponent)
@@ -172,7 +172,7 @@ private:
         return val;
     }
 
-    MoveType selectBestByVisit(NodePtr node) {
+    ActType selectBestByVisit(NodePtr node) {
         NodePtr most_ptr = node; // init
         CountType most_visit = 0;
         auto it = TTree::getChildIterator(node);
@@ -183,13 +183,13 @@ private:
                 most_visit = child->visits;
             }
         }
-        return most_ptr->move;
+        return most_ptr->action;
     }
 
-    MoveType selectBestByValue(NodePtr node) {
+    ActType selectBestByValue(NodePtr node) {
         NodePtr best_ptr = node; // init
         double best_val = -std::numeric_limits<double>::max();
-        double nodeVisitLog = log(static_cast<double>(node->visits));
+        double nodeVisitLog = log(static_cast<double>(node->N));
         auto it = TTree::getChildIterator(node);
         while (it.hasNext()) {
             NodePtr child = it.next();
@@ -199,7 +199,7 @@ private:
                 best_val = val;
             }
         }
-        return best_ptr->move;
+        return best_ptr->action;
         // NOTE: use lower exploration rate for value computation to
         //       avoid selection of a node, which has a low visit count
         // NOTE: other solution to use constant zero, win ratio decides
@@ -208,23 +208,23 @@ private:
 public:
     MCTS() { }
 
-    //! Execute a search on the current state for the ai, return the move
-    MoveType execute(int idxAi,
-                     int maxRolloutDepth,
-                     const TProblem& cstate,
-                     unsigned int policyIter,
-                     unsigned int rolloutIter,
-                     const std::vector<MoveType>& history,
-                     RolloutCUDA<TProblem>* rollloutCuda,
-                     TPolicyDebug& policyDebug)
+    //! Execute a search on the current state for the ai, return the action
+    ActType execute(int idxAi,
+                    int maxRolloutDepth,
+                    const TProblem& cstate,
+                    unsigned int policyIter,
+                    unsigned int rolloutIter,
+                    const std::vector<ActType>& history,
+                    RolloutCUDA<TProblem>* rollloutCuda,
+                    TPolicyDebug& policyDebug)
     {
         // walk tree according to history
         NodePtr subroot = catchup(cstate, history);
         { // only one choice, dont think
-            MoveType moves[TProblem::MaxMoves];
-            MoveCounterType nMoves = cstate.getPossibleMoves(idxAi, idxAi, moves);
-            if (nMoves == 1) {
-                return moves[0];
+            ActType actions[TProblem::MaxActions];
+            ActCounterType nActions = cstate.getPossibleActions(idxAi, idxAi, actions);
+            if (nActions == 1) {
+                return actions[0];
             }
         }
 
@@ -271,11 +271,11 @@ public:
         stream << ";" << TTree::getNodeId(next);
         stream << ";" << TTree::getNodeId(parent);
         stream << ";" << time; //TODO:fix
-        stream << ";" << TProblem::move2str(next->move);
+        stream << ";" << TProblem::act2str(next->action);
         stream << ";" << opponent; //TODO:fix
         stream << ";" << "0"; // not selected
-        stream << ";" << next->visits / maxIter;
-        stream << ";" << next->wins / (float)next->visits;
+        stream << ";" << next->N / maxIter;
+        stream << ";" << next->W / (float)next->N;
         stream << std::endl;
 
         auto it = TTree::getChildIterator(next);
@@ -286,8 +286,8 @@ public:
     }
 
     template <typename T>
-    void writeResults(const TProblem& state, int idxAi, float maxIter, const std::vector<MoveType>& history, T& stream) {
-        stream << "Branch;ID;ParentID;Time;Move;Opponent;Select;Visit;Win";
+    void writeResults(const TProblem& state, int idxAi, float maxIter, const std::vector<ActType>& history, T& stream) {
+        stream << "Branch;ID;ParentID;Time;Actions;Opponent;Select;Visit;Win";
         stream << std::endl;
         stream << "0;0;0;0;ROOT;0;0;0;0";
         stream << std::endl;
@@ -295,25 +295,25 @@ public:
         NodePtr parent = TTree::getRoot();
         NodePtr child = TTree::getRoot();
         for (size_t time = 0; time < history.size() ; ++time) {
-            MoveType move = history[time];
+            ActType act = history[time];
             int opponent = state.getPlayer(time) != idxAi ? 1 : 0;
 
             auto it = TTree::getChildIterator(parent);
             while (it.hasNext()) {
                 NodePtr next = it.next();
 
-                if (next->move == move) {
+                if (next->action == act) {
                     child = next; // set child to selected node
 
                     stream << "0"; // not branch node, dont filter
                     stream << ";" << TTree::getNodeId(next);
                     stream << ";" << TTree::getNodeId(parent);
                     stream << ";" << time;
-                    stream << ";" << TProblem::move2str(next->move);
+                    stream << ";" << TProblem::act2str(next->action);
                     stream << ";" << opponent;
                     stream << ";" << "1"; // selected
-                    stream << ";" << next->visits / maxIter;
-                    stream << ";" << next->wins / (float)next->visits;
+                    stream << ";" << next->N / maxIter;
+                    stream << ";" << next->W / (float)next->N;
                     stream << std::endl;
 
                 } else { // not selected nodes

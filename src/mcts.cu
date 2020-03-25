@@ -33,13 +33,13 @@ __global__ void rollout(int idxAi,
                         const TProblem* u_state,
                         curandState* d_rnd,
                         double* u_result) {
-    typedef typename TProblem::MoveType MoveType;
-    typedef typename TProblem::MoveCounterType MoveCounterType;
+    typedef typename TProblem::ActType ActType;
+    typedef typename TProblem::ActCounterType ActCounterType;
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     TProblem state(*u_state);
-    MoveType moves[TProblem::MaxMoves];
+    ActType actions[TProblem::MaxActions];
 
     // Copy state to local memory for efficiency
     curandState localRnd = d_rnd[idx];
@@ -48,9 +48,9 @@ __global__ void rollout(int idxAi,
     while (!state.isFinished()) {
         if (++depth == maxRolloutDepth)
             break;
-        MoveCounterType count = state.getPossibleMoves(idxAi, state.getPlayer(), moves);
-        MoveCounterType pick = curand(&localRnd) % count;
-        state.update(moves[pick]);
+        ActCounterType count = state.getPossibleActions(idxAi, state.getPlayer(), actions);
+        ActCounterType pick = curand(&localRnd) % count;
+        state.update(actions[pick]);
     }
 
     // Copy state back to global memory

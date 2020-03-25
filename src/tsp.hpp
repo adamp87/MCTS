@@ -31,17 +31,17 @@ public:
 
 //! TODO
 /*!
- * \details This class implements the function getPossibleMoves for applying AI.
- *          This function returns those moves, which can be played in the next turn without breaking the rules.
+ * \details This class implements the function getPossibleActions for applying AI.
+ *          This function returns those actions, which can be played in the next turn without breaking the rules.
  *          Other functionalities are helping to simulate a game and to get the an evaluation of the current state.
  * \author adamp87
 */
 class TSP_Vertex : public TSP_Base {
 public:
-    typedef std::uint_fast16_t MoveType; //!< interface
-    typedef std::uint_fast16_t MoveCounterType; //!< interface
+    typedef std::uint_fast16_t ActType; //!< interface
+    typedef std::uint_fast16_t ActCounterType; //!< interface
     constexpr static double UCT_C = 1.4; //!< interface, constant for exploration in uct formula
-    constexpr static unsigned int MaxMoves = 127; //!< interface
+    constexpr static unsigned int MaxActions = 127; //!< interface
     constexpr static unsigned int MaxChildPerNode = 127; //!< interface, TODO
 
 private:
@@ -51,8 +51,8 @@ private:
     int nodeCount;
 
     int visitedCount;
-    int tour[MaxMoves]; // TODO: dynamic
-    bool visited[MaxMoves];
+    int tour[MaxActions]; // TODO: dynamic
+    bool visited[MaxActions];
 
 public:
     //! Set initial state
@@ -76,7 +76,7 @@ public:
         edgeWeights.insert(edgeWeights.end(), data+3, data+3+nodeCount*nodeCount);
         weights = &edgeWeights[0];
 
-        if (MaxMoves < nodeCount) {
+        if (MaxActions < nodeCount) {
             // TODO
             throw -1;
         }
@@ -87,27 +87,26 @@ public:
         return visitedCount == nodeCount;
     }
 
-    //! Interface, Implements game logic, return the possible moves that idxAi can play
+    //! Interface, Implements game logic, return the possible actions that idxAi can play
     /*!
     * \param idxMe ID of player who executes function
-    * \param idxAi ID of player to get possible moves for
-    * \param moves Allocated array to store possible moves
-    * \return Number of possible moves
-    * \note Using hands[idxAi] is hard-coded cheating
+    * \param idxAi ID of player to get possible action for
+    * \param actions Allocated array to store possible actions
+    * \return Number of possible actions
     */
-    CUDA_CALLABLE_MEMBER MoveCounterType getPossibleMoves(int, int, MoveType* moves) const {
-        MoveCounterType nMoves = 0;
+    CUDA_CALLABLE_MEMBER ActCounterType getPossibleActions(int, int, ActType* actions) const {
+        ActCounterType nActions = 0;
         for (int i = 1; i < nodeCount; ++i) {
             if (!visited[i])
-                moves[nMoves++] = i;
+                actions[nActions++] = i;
         }
-        return nMoves;
+        return nActions;
     }
 
-    //! Interface, Update the game state according to move
-    CUDA_CALLABLE_MEMBER void update(MoveType& move) {
-        visited[move] = true;
-        tour[visitedCount++] = move;
+    //! Interface, Update the game state according to action
+    CUDA_CALLABLE_MEMBER void update(ActType& action) {
+        visited[action] = true;
+        tour[visitedCount++] = action;
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
@@ -118,9 +117,9 @@ public:
         return win;
     }
 
-    ///! Interface, convert move to string
-    static std::string move2str(MoveType& move) {
-        return std::to_string(move);
+    ///! Interface, convert action to string
+    static std::string act2str(ActType& action) {
+        return std::to_string(action);
     }
 
     double getTourLength() const {
@@ -141,22 +140,22 @@ public:
 
 //! TODO
 /*!
- * \details This class implements the function getPossibleMoves for applying AI.
- *          This function returns those moves, which can be played in the next turn without breaking the rules.
+ * \details This class implements the function getPossibleAxtions for applying AI.
+ *          This function returns those actions, which can be played in the next turn without breaking the rules.
  *          Other functionalities are helping to simulate a game and to get the an evaluation of the current state.
  * \author adamp87
 */
 class TSP_Edge : public TSP_Base {
 public:
     //!< interface
-    struct MoveType {
+    struct ActType {
         int v1;
         int v2;
 
-        CUDA_CALLABLE_MEMBER MoveType():v1(0),v2(0) {}
-        CUDA_CALLABLE_MEMBER MoveType(int v1,int v2):v1(v1),v2(v2) {}
+        CUDA_CALLABLE_MEMBER ActType():v1(0),v2(0) {}
+        CUDA_CALLABLE_MEMBER ActType(int v1,int v2):v1(v1),v2(v2) {}
 
-        bool operator==(const MoveType& other) const {
+        bool operator==(const ActType& other) const {
             return v1 == other.v1 &&
                    v2 == other.v2;
         }
@@ -165,9 +164,9 @@ public:
         }
     };
 
-    typedef std::uint_fast16_t MoveCounterType; //!< interface
+    typedef std::uint_fast16_t ActCounterType; //!< interface
     constexpr static double UCT_C = 1.4; //!< interface, constant for exploration in uct formula
-    constexpr static unsigned int MaxMoves = 1028; //!< interface
+    constexpr static unsigned int MaxActions = 1028; //!< interface
     constexpr static unsigned int MaxChildPerNode = 1028; //!< interface, TODO
 
 private:
@@ -175,8 +174,8 @@ private:
     double ub;
     double* weights;
     int nodeCount;
-    int vIn[MaxMoves];
-    int vOut[MaxMoves]; // TODO: dynamic
+    int vIn[MaxActions];
+    int vOut[MaxActions]; // TODO: dynamic
 
 public:
     //! Set initial state
@@ -197,7 +196,7 @@ public:
         edgeWeights.insert(edgeWeights.end(), data+3, data+3+nodeCount*nodeCount);
         weights = &edgeWeights[0];
 
-        if (MaxMoves < nodeCount) {
+        if (MaxActions < nodeCount) {
             // TODO
             throw -1;
         }
@@ -212,16 +211,15 @@ public:
         return true;
     }
 
-    //! Interface, Implements game logic, return the possible moves that idxAi can play
+    //! Interface, Implements game logic, return the possible actions that idxAi can play
     /*!
     * \param idxMe ID of player who executes function
-    * \param idxAi ID of player to get possible moves for
-    * \param moves Allocated array to store possible moves
-    * \return Number of possible moves
-    * \note Using hands[idxAi] is hard-coded cheating
+    * \param idxAi ID of player to get possible actions for
+    * \param actions Allocated array to store possible actions
+    * \return Number of possible actions
     */
-    CUDA_CALLABLE_MEMBER MoveCounterType getPossibleMoves(int, int, MoveType* moves) const {
-        MoveCounterType nMoves = 0;
+    CUDA_CALLABLE_MEMBER ActCounterType getPossibleActions(int, int, ActType* actions) const {
+        ActCounterType nActions = 0;
         for (int i = 1; i < nodeCount; ++i) {
             if (vIn[i] != 0)
                 continue;
@@ -244,17 +242,17 @@ public:
                     }
                 }
                 if (!hasLoop || loopSize == nodeCount-2)
-                    moves[nMoves++] = MoveType(i, j);
+                    actions[nActions++] = ActType(i, j);
             }
         }
 
-        return nMoves;
+        return nActions;
     }
 
-    //! Interface, Update the game state according to move
-    CUDA_CALLABLE_MEMBER void update(MoveType& move) {
-        vIn[move.v1] = move.v2;
-        vOut[move.v2] = move.v1;
+    //! Interface, Update the game state according to action
+    CUDA_CALLABLE_MEMBER void update(ActType& act) {
+        vIn[act.v1] = act.v2;
+        vOut[act.v2] = act.v1;
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
@@ -273,9 +271,9 @@ public:
         return win;
     }
 
-    ///! Interface, convert move to string
-    static std::string move2str(MoveType& move) {
-        return static_cast<std::string>(move);
+    ///! Interface, convert act to string
+    static std::string act2str(ActType& act) {
+        return static_cast<std::string>(act);
     }
 
     double getTourLength() const {

@@ -105,37 +105,37 @@ struct MovesOOC {
 };
 
 //! Base class for all Tree::Node implementations
-template <typename T_Move>
+template <typename T_Act>
 struct MCTSNodeBase {
-    typedef T_Move MoveType;
+    typedef T_Act ActType;
     typedef std::uint_fast32_t CountType;
 
     //! Dummy LockGuard, helps to keep policy transparent
     class LockGuard {
     public:
-        LockGuard(MCTSNodeBase<T_Move>&) {}
+        LockGuard(MCTSNodeBase<T_Act>&) {}
     };
 
-    T_Move      move;   //!< e.g. card played out
-    CountType   visits; //!< node visit count
-    double      wins;   //!< number of wins
-    MovesOOC    nexts;  //!< TODO
+    CountType   N;      //!< node visit count
+    double      W;      //!< number of wins
+    T_Act       action; //!< e.g. card played out
+    MovesMeM<T_Act>    nexts;
 
-    MCTSNodeBase(T_Move move)
-        : move(move), visits(0), wins(0.0)
+    MCTSNodeBase(const T_Act& action)
+        : N(0), W(0.0), action(action)
     { }
 };
 
 //! Base class for multithreaded MCTreeDynamic::Node
-template <typename T_Move>
+template <typename T_Act>
 struct MCTSNodeBaseMT {
-    typedef T_Move MoveType;
+    typedef T_Act ActType;
     typedef std::uint_fast32_t CountType;
 
     //! LockGuard inherited from std, constructor takes node
     class LockGuard : public std::lock_guard<std::mutex> {
     public:
-        LockGuard(MCTSNodeBaseMT<T_Move>& node)
+        LockGuard(MCTSNodeBaseMT<T_Act>& node)
             : std::lock_guard<std::mutex>(node.lock)
         {}
     };
@@ -156,14 +156,14 @@ struct MCTSNodeBaseMT {
         }
     };
 
-    T_Move                  move;   //!< e.g. card played out
+    std::atomic<CountType>  N;      //!< node visit count
+    MyAtomicDouble          W;      //!< number of wins for each points
+    T_Act                   action; //!< e.g. card played out
     std::mutex              lock;   //!< mutex for thread-safe policy
-    std::atomic<CountType>  visits; //!< node visit count
-    MyAtomicDouble          wins;   //!< number of wins for each points
-    MovesMeM<T_Move>        nexts;  //!< TODO
+    MovesMeM<T_Act>    nexts;
 
-    MCTSNodeBaseMT(T_Move move)
-        : move(move), visits(0)
+    MCTSNodeBaseMT(const T_Act& action)
+        : N(0), W(0.0), action(action)
     { }
 };
 
@@ -178,7 +178,7 @@ struct MCTSNodeBaseMT {
 template <typename T_NodeBase>
 class MCTreeDynamic {
 public:
-    typedef typename T_NodeBase::MoveType MoveType;
+    typedef typename T_NodeBase::ActType ActType;
 
     //! One node with childs, interface
     class Node : public T_NodeBase {
@@ -188,7 +188,7 @@ public:
         friend class ChildIterator;
         friend class MCTreeDynamic;
 
-        Node(MoveType move) : T_NodeBase(move) {}
+        Node(const ActType& action) : T_NodeBase(action) {}
         Node(const Node&) = delete;
     };
 
@@ -222,14 +222,14 @@ private:
 public:
     //! Construct tree, interface
     MCTreeDynamic() {
-        // artifical root, doesnt hold valid move
-        root.reset(new Node(MoveType()));
+        // artifical root, doesnt hold valid action
+        root.reset(new Node(ActType()));
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, MoveType move) const {
+    NodePtr addNode(NodePtr& _parent, const ActType& act) const {
         // init leaf node
-        std::unique_ptr<Node> child(new Node(move));
+        std::unique_ptr<Node> child(new Node(act));
 
         _parent->childs.push_back(std::move(child));
         return _parent->childs.back().get();
@@ -259,19 +259,19 @@ public:
  *          Each node stores the indices in fixed length array, bounded by N_MaxChild.
  * \author adamp87
 */
-template <typename T_Move, unsigned int N_MaxChild>
+template <typename T_Act, unsigned int N_MaxChild>
 class MCTreeStaticArray {
 public:
-    typedef T_Move MoveType;
+    typedef T_Act ActType;
 
     //! One node with childs, interface
-    class Node : public MCTSNodeBase<MoveType> {
+    class Node : public MCTSNodeBase<ActType> {
         size_t childs[N_MaxChild]; //!< child indices as fixed length array
 
         friend class ChildIterator;
         friend class MCTreeStaticArray;
 
-        Node(MoveType move) : MCTSNodeBase<MoveType>(move), childs{0} {}
+        Node(ActType act) : MCTSNodeBase<ActType>(act), childs{0} {}
     };
 
     //!< pointer to a node, interface
@@ -335,16 +335,16 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticArray() {
-        // artifical root, doesnt hold valid move
-        MoveType dummy = MoveType();
+        // artifical root, doesnt hold valid action
+        ActType dummy = ActType();
         Node root(dummy);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, MoveType move) {
+    NodePtr addNode(NodePtr& _parent, ActType act) {
         // init leaf node
-        Node child(move);
+        Node child(act);
 
         // find next free idx of parent to put child
         unsigned int idx = 0;
@@ -388,20 +388,20 @@ public:
  *          Each node stores the indices for a next child and for its next brother.
  * \author adamp87
 */
-template <typename T_Move>
+template <typename T_Act>
 class MCTreeStaticList {
-    typedef T_Move MoveType;
+    typedef T_Act ActType;
 
 public:
     //! One node with childs, interface
-    class Node : public MCTSNodeBase<MoveType> {
+    class Node : public MCTSNodeBase<ActType> {
         size_t child_head; //!< head of linked list for next child, breadth one level down
         size_t parent_next; //!< link to next child node of parent (brother), same breadth level
 
         friend class ChildIterator;
         friend class MCTreeStaticList;
 
-        Node(MoveType move) : MCTSNodeBase<MoveType>(move), child_head(0), parent_next(0) {}
+        Node(ActType act) : MCTSNodeBase<ActType>(act), child_head(0), parent_next(0) {}
     };
 
     //!< pointer to a node, interface
@@ -467,16 +467,16 @@ private:
 public:
     //! Construct tree, interface
     MCTreeStaticList() {
-        // artifical root, doesnt hold valid move
-        MoveType dummy = MoveType();
+        // artifical root, doesnt hold valid action
+        ActType dummy = ActType();
         Node root(dummy);
         nodes.push_back(root);
     }
 
     //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, MoveType move) {
+    NodePtr addNode(NodePtr& _parent, ActType act) {
         // init leaf node
-        Node child(move);
+        Node child(act);
         Node& parent = *_parent;
         if (parent.child_head == 0) { // first child
             parent.child_head = nodes.size();

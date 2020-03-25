@@ -28,13 +28,13 @@ int getSeed() {
 #endif
 
 #ifdef _OPENMP
-typedef MCTreeDynamic<MCTSNodeBaseMT<Chess::MoveType> > TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > TreeContainer;
 
 // keep static_assert, might be usefull later
-static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::MoveType> > >::value,
+static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeStaticArray<Chess::MoveType, Chess::MaxChildPerNode> TreeContainer;
+typedef MCTreeStaticArray<Chess::ActType, Chess::MaxChildPerNode> TreeContainer;
 #endif
 
 typedef MCTS_Policy_Debug PolicyDebug;
@@ -42,56 +42,56 @@ typedef MCTS_Policy_Debug PolicyDebug;
 
 MovesOOC::TmpFile MovesOOC::tmp;
 
-Chess::MoveType getCmdInput(const Chess& state, int player) {
+Chess::ActType getCmdInput(const Chess& state, int player) {
     bool valid = false;
-    Chess::MoveType move;
-    Chess::MoveType moves[Chess::MaxMoves];
-    Chess::MoveCounterType nMoves = state.getPossibleMoves(player, player, moves);
+    Chess::ActType act;
+    Chess::ActType actions[Chess::MaxActions];
+    Chess::ActCounterType nActions = state.getPossibleActions(player, player, actions);
     while (!valid) {
-        std::string moveStr;
+        std::string actStr;
         std::cout << "Player" << player << ": ";
-        std::cin >> moveStr;
-        std::transform(moveStr.begin(), moveStr.end(), moveStr.begin(), [](unsigned char c){ return ::toupper(c); });
-        if (moveStr.size() < 4)
+        std::cin >> actStr;
+        std::transform(actStr.begin(), actStr.end(), actStr.begin(), [](unsigned char c){ return ::toupper(c); });
+        if (actStr.size() < 4)
             continue;
-        moveStr.push_back('N'); // make sure has 4th element
-        Chess::MoveType::Type moveT = Chess::MoveType::Normal;
-        switch (moveStr[4]) {
+        actStr.push_back('N'); // make sure has 4th element
+        Chess::ActType::Type actT = Chess::ActType::Normal;
+        switch (actStr[4]) {
         case 'C':
-            moveT = Chess::MoveType::Castling;
+            actT = Chess::ActType::Castling;
             break;
         case 'E':
-            moveT = Chess::MoveType::EnPassant;
+            actT = Chess::ActType::EnPassant;
             break;
         case 'Q':
-            moveT = Chess::MoveType::PromoteQ;
+            actT = Chess::ActType::PromoteQ;
             break;
         case 'R':
-            moveT = Chess::MoveType::PromoteR;
+            actT = Chess::ActType::PromoteR;
             break;
         case 'B':
-            moveT = Chess::MoveType::PromoteB;
+            actT = Chess::ActType::PromoteB;
             break;
         case 'K':
-            moveT = Chess::MoveType::PromoteK;
+            actT = Chess::ActType::PromoteK;
             break;
         case 'M': // game must be finished explicitly
-            moveT = Chess::MoveType::CheckMate;
+            actT = Chess::ActType::CheckMate;
             break;
         case 'D': // game must be finished explicitly
-            moveT = Chess::MoveType::Even;
+            actT = Chess::ActType::Even;
             break;
         default:
             break;
         }
-        move = Chess::MoveType(moveStr[0]-'A', moveStr[1]-'1', moveStr[2]-'A', moveStr[3]-'1', moveT);
-        for (Chess::MoveCounterType i = 0; i < nMoves; ++i) {
-            if (move == moves[i]) {
+        act = Chess::ActType(actStr[0]-'A', actStr[1]-'1', actStr[2]-'A', actStr[3]-'1', actT);
+        for (Chess::ActCounterType i = 0; i < nActions; ++i) {
+            if (act == actions[i]) {
                 valid = true;
             }
         }
     }
-    return move;
+    return act;
 }
 
 int main(int argc, char** argv) {
@@ -155,10 +155,10 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     Chess state;
-    std::vector<Chess::MoveType> history;
+    std::vector<Chess::ActType> history;
     PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
     std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai;
-    if (!state.test_moves()) {
+    if (!state.test_actions()) {
         std::cout << "Error in logic" << std::endl;
         return -1;
     }
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     for (int time = 0; !state.isFinished(); ++time) {
         int player = state.getPlayer(time);
         auto t0 = std::chrono::high_resolution_clock::now();
-        Chess::MoveType move = (policyIter[player] == 0)  ?
+        Chess::ActType act =   (policyIter[player] == 0)  ?
                                getCmdInput(state, player) :
                                ai[player].execute(player,
                                                   maxRolloutDepth,
@@ -187,14 +187,14 @@ int main(int argc, char** argv) {
                                                   rolloutCuda.get(),
                                                   policyDebug);
         auto t1 = std::chrono::high_resolution_clock::now();
-        std::string moveDesc = state.getMoveDescription(move);
-        state.update(move);
-        history.push_back(move);
+        std::string actDesc = state.getActionDescription(act);
+        state.update(act);
+        history.push_back(act);
 
         std::cout << "T" << time << " ";
         std::cout << "P" << int(player) << " ";
-        std::cout << Chess::move2str(move) << " ";
-        std::cout << moveDesc << " ";
+        std::cout << Chess::act2str(act) << " ";
+        std::cout << actDesc << " ";
         std::cout << state.getBoardDescription() << " ";
         std::cout << std::chrono::duration_cast<std::chrono::seconds>(t1-t0).count() << " sec";
         std::cout << std::endl;

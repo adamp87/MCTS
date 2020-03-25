@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     Hearts state(cheat != 0);
-    std::vector<Hearts::MoveType> history;
+    std::vector<Hearts::ActType> history;
     PolicyDebug policyDebug(writeTree, workDir, "hearts", timestamp);
     std::array<MCTS<TreeContainer, Hearts, PolicyDebug>, 4> ai;
 
@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
             for (uint8 value = 0; value < 13; ++value) {
                 uint8 card = 13 * color + value;
                 if (state.isCardAtPlayer(p, card)) {
-                    std::cout << Hearts::move2str(card) << " ";
+                    std::cout << Hearts::act2str(card) << " ";
                 }
             }
         }
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
             history.push_back(card);
 
             std::cout << "P" << int(player) << " ";
-            std::cout << Hearts::move2str(card) << " ";
+            std::cout << Hearts::act2str(card) << " ";
         }
         std::cout << std::endl;
     }

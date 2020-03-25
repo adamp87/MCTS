@@ -15,15 +15,15 @@
 
 //! Stores the state of the figures on the board
 /*!
- * \details This class implements the function getPossibleMoves for applying AI.
- *          This function returns those moves, which can be played in the next turn without breaking the rules.
+ * \details This class implements the function getPossibleActions for applying AI.
+ *          This function returns those actions, which can be played in the next turn without breaking the rules.
  *          Other functionalities are helping to simulate a game and to get the an evaluation of the current state.
  * \author adamp87
 */
 class Chess {
 public:
     //!< interface
-    struct MoveType {
+    struct ActType {
         enum Type { Normal, Castling, EnPassant, PromoteQ, PromoteR, PromoteB, PromoteK, CheckMate, Even };
         Type type;
         std::int_fast8_t toX;
@@ -31,10 +31,10 @@ public:
         std::int_fast8_t fromX;
         std::int_fast8_t fromY;
 
-        CUDA_CALLABLE_MEMBER MoveType():type(Normal),toX(0),toY(0),fromX(0),fromY(0) {}
-        CUDA_CALLABLE_MEMBER MoveType(int fromX,int fromY,int toX,int toY,Type type=Normal):type(type),toX(toX),toY(toY),fromX(fromX),fromY(fromY) {}
+        CUDA_CALLABLE_MEMBER ActType():type(Normal),toX(0),toY(0),fromX(0),fromY(0) {}
+        CUDA_CALLABLE_MEMBER ActType(int fromX,int fromY,int toX,int toY,Type type=Normal):type(type),toX(toX),toY(toY),fromX(fromX),fromY(fromY) {}
 
-        bool operator==(const MoveType& other) const {
+        bool operator==(const ActType& other) const {
             return type == other.type &&
                    toX == other.toX &&
                    toY == other.toY &&
@@ -51,10 +51,10 @@ public:
         }
     };
 
-    typedef std::uint_fast8_t MoveCounterType; //!< interface
+    typedef std::uint_fast8_t ActCounterType; //!< interface
     constexpr static double UCT_C = 0.1; //!< interface, constant for exploration in uct formula
-    constexpr static unsigned int MaxMoves = 218; //!< interface: https://chess.stackexchange.com/questions/4490/maximum-possible-movement-in-a-turn
-    constexpr static unsigned int MaxChildPerNode = MaxMoves; //!< interface
+    constexpr static unsigned int MaxActions = 218; //!< interface: https://chess.stackexchange.com/questions/4490/maximum-possible-movement-in-a-turn
+    constexpr static unsigned int MaxChildPerNode = MaxActions; //!< interface
 
 private:
     struct Figure {
@@ -123,18 +123,17 @@ public:
         return kingb || kingw;
     }
 
-    //! Interface, Implements game logic, return the possible moves that idxAi can play
+    //! Interface, Implements game logic, return the possible actions that idxAi can play
     /*!
     * \param idxMe ID of player who executes function
-    * \param idxAi ID of player to get possible moves for
-    * \param moves Allocated array to store possible moves
-    * \return Number of possible moves
-    * \note Using hands[idxAi] is hard-coded cheating
+    * \param idxAi ID of player to get possible actions for
+    * \param actions Allocated array to store possible actions
+    * \return Number of possible actions
     */
-    CUDA_CALLABLE_MEMBER MoveCounterType getPossibleMoves(int idxMe, int idxAi, MoveType* moves, bool checkKing=true) const {
+    CUDA_CALLABLE_MEMBER ActCounterType getPossibleActions(int idxMe, int idxAi, ActType* actions, bool checkKing=true) const {
         // inspired by: https://codereview.stackexchange.com/questions/173656/chess-game-in-c
         //TODO: cuda does not like lambda functions, should be refactored to build for cuda
-        MoveCounterType nMoves = 0;
+        ActCounterType nActions = 0;
         Figure board[8*8];
 
         auto getPos = [&] (int x, int y, int dx, int dy) -> int { return (y+dy)*8+x+dx; };
@@ -143,17 +142,17 @@ public:
         auto isOpponent = [&] (int x, int y, int dx, int dy) -> bool { return isInsideBoard(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type != Figure::Unset && board[getPos(x,y,dx,dy)].playerIdx != idxAi; };
         auto isEnPassant = [&] (int x, int y, int dx, int dy) -> bool { return isOpponent(x,y,dx,dy) && board[getPos(x,y,dx,dy)].type == Figure::Pawn && board[getPos(x,y,dx,dy)].firstMoved == time; };
 
-        auto isKingInCheck = [&] (int x, int y, int dx, int dy, MoveType::Type type=MoveType::Normal) -> bool {
+        auto isKingInCheck = [&] (int x, int y, int dx, int dy, ActType::Type type=ActType::Normal) -> bool {
             if (!checkKing)
                 return false; // block recursion
             Chess copy(*this);
-            MoveType testMove(x,y,x+dx,y+dy,type);
-            copy.update(testMove);
-            MoveType copymoves[MaxMoves];
-            MoveCounterType copynMoves = copy.getPossibleMoves(copy.getPlayer(), copy.getPlayer(), copymoves, false);
-            for (int i = 0; i < copynMoves; ++i) {
+            ActType testAction(x,y,x+dx,y+dy,type);
+            copy.update(testAction);
+            ActType copyactions[MaxActions];
+            ActCounterType copynActions = copy.getPossibleActions(copy.getPlayer(), copy.getPlayer(), copyactions, false);
+            for (int i = 0; i < copynActions; ++i) {
                 int king = idxAi * 16;
-                if (copymoves[i].toX == copy.figures[king].posX && copymoves[i].toY == copy.figures[king].posY) {
+                if (copyactions[i].toX == copy.figures[king].posX && copyactions[i].toY == copy.figures[king].posY) {
                     // opponent can hit king
                     return true;
                 }
@@ -161,19 +160,19 @@ public:
             return false;
         };
 
-        auto addMove = [&] (int x, int y, int dx, int dy, MoveType::Type type=MoveType::Normal) -> void {
+        auto addMove = [&] (int x, int y, int dx, int dy, ActType::Type type=ActType::Normal) -> void {
             if(isFree(x,y,dx,dy) || isOpponent(x,y,dx,dy)) {
                 if (isKingInCheck(x, y, dx, dy, type))
                     return;
 
-                moves[nMoves++] = MoveType(x,y,x+dx,y+dy,type);
+                actions[nActions++] = ActType(x,y,x+dx,y+dy,type);
             }
         };
         auto addPromote = [&] (int x, int y, int dx, int dy) -> void {
-            addMove(x,y,dx,dy,MoveType::PromoteK);
-            addMove(x,y,dx,dy,MoveType::PromoteB);
-            addMove(x,y,dx,dy,MoveType::PromoteR);
-            addMove(x,y,dx,dy,MoveType::PromoteQ);
+            addMove(x,y,dx,dy,ActType::PromoteK);
+            addMove(x,y,dx,dy,ActType::PromoteB);
+            addMove(x,y,dx,dy,ActType::PromoteR);
+            addMove(x,y,dx,dy,ActType::PromoteQ);
         };
 
         auto opNul = [&] (int    ) -> int { return    0; };
@@ -229,15 +228,15 @@ public:
                     if(idxAi==1 && isFree(x,y,0,-1)) {if (y!=1) addMove(x,y,0,-1); else addPromote(x,y,0,-1);}
                     if(idxAi==1 && isOpponent(x,y,-1,-1)) {if (y!=1) addMove(x,y,-1,-1); else addPromote(x,y,-1,-1);}
                     if(idxAi==1 && isOpponent(x,y,1,-1)) {if (y!=1) addMove(x,y,1,-1); else addPromote(x,y,1,-1);}
-                    if(idxAi==1 && y==3 && isEnPassant(x,y,1,0)) addMove(x,y,1,-1,MoveType::EnPassant);
-                    if(idxAi==1 && y==3 && isEnPassant(x,y,-1,0)) addMove(x,y,-1,-1,MoveType::EnPassant);
+                    if(idxAi==1 && y==3 && isEnPassant(x,y,1,0)) addMove(x,y,1,-1,ActType::EnPassant);
+                    if(idxAi==1 && y==3 && isEnPassant(x,y,-1,0)) addMove(x,y,-1,-1,ActType::EnPassant);
                     // white pawn
                     if(idxAi==0 && y==1 && isFree(x,y,0,1) && isFree(x,y,0,2)) addMove(x,y,0,2);
                     if(idxAi==0 && isFree(x,y,0,1)) {if (y!=6) addMove(x,y,0,1); else addPromote(x,y,0,1);}
                     if(idxAi==0 && isOpponent(x,y,-1,1)) {if (y!=6) addMove(x,y,-1,1); else addPromote(x,y,-1,1);}
                     if(idxAi==0 && isOpponent(x,y,1,1)) {if (y!=6) addMove(x,y,1,1); else addPromote(x,y,1,1);}
-                    if(idxAi==0 && y==4 && isEnPassant(x,y,1,0)) addMove(x,y,1,1,MoveType::EnPassant);
-                    if(idxAi==0 && y==4 && isEnPassant(x,y,-1,0)) addMove(x,y,-1,1,MoveType::EnPassant);
+                    if(idxAi==0 && y==4 && isEnPassant(x,y,1,0)) addMove(x,y,1,1,ActType::EnPassant);
+                    if(idxAi==0 && y==4 && isEnPassant(x,y,-1,0)) addMove(x,y,-1,1,ActType::EnPassant);
                     break;
 
                 case Figure::Type::Knight:
@@ -249,8 +248,8 @@ public:
                     for(auto dy : {-1,0,1})
                         for(auto dx : {-1,0,1})
                             addMove(x,y,dy,dx);
-                    if (castlingL(x, y)) addMove(x,y,-2,0,MoveType::Castling);
-                    if (castlingR(x, y)) addMove(x,y,+2,0,MoveType::Castling);
+                    if (castlingL(x, y)) addMove(x,y,-2,0,ActType::Castling);
+                    if (castlingR(x, y)) addMove(x,y,+2,0,ActType::Castling);
                     break;
 
                 case Figure::Type::Rook:
@@ -283,13 +282,13 @@ public:
             }
         }
 
-        if (nMoves == 0 && checkKing) {
+        if (nActions == 0 && checkKing) {
             //checkmate or even
             int king = idxAi * 16;
             bool checkmate = false;
-            nMoves = getPossibleMoves(idxMe, getPlayer(time+1), moves, false);
-            for (int i = 0; i < nMoves; ++i) {
-                if (moves[i].toX == figures[king].posX && moves[i].toY == figures[king].posY) {
+            nActions = getPossibleActions(idxMe, getPlayer(time+1), actions, false);
+            for (int i = 0; i < nActions; ++i) {
+                if (actions[i].toX == figures[king].posX && actions[i].toY == figures[king].posY) {
                     // opponent can hit king
                     checkmate = true;
                 }
@@ -297,63 +296,63 @@ public:
             int x = figures[king].posX;
             int y = figures[king].posY;
             if (checkmate) {
-                moves[0] = MoveType(x,y,x,y,MoveType::CheckMate);
+                actions[0] = ActType(x,y,x,y,ActType::CheckMate);
             } else {
-                moves[0] = MoveType(x,y,x,y,MoveType::Even);
+                actions[0] = ActType(x,y,x,y,ActType::Even);
             }
             return 1;
         }
 
-        return nMoves;
+        return nActions;
     }
 
     //! Interface, Update the game state according to move
-    CUDA_CALLABLE_MEMBER void update(MoveType& move) {
+    CUDA_CALLABLE_MEMBER void update(ActType& act) {
         int idxAi = getPlayer(time);
         int idxOp = getPlayer(time+1);
         for(int i = idxAi*16; i < 16*(idxAi+1); ++i) {
-            if (figures[i].type != Figure::Unset && figures[i].posX == move.fromX && figures[i].posY == move.fromY) {
-                figures[i].posX = move.toX;
-                figures[i].posY = move.toY;
+            if (figures[i].type != Figure::Unset && figures[i].posX == act.fromX && figures[i].posY == act.fromY) {
+                figures[i].posX = act.toX;
+                figures[i].posY = act.toY;
                 if (figures[i].firstMoved == 0)
                     figures[i].firstMoved = time+1;
                 for(int i = idxOp*16; i < 16*(idxOp+1); ++i) { // remove opponent figure
-                    if (figures[i].posX == move.toX && figures[i].posY == move.toY) {
+                    if (figures[i].posX == act.toX && figures[i].posY == act.toY) {
                         figures[i].type = Figure::Unset;
                     }
                 }
-                switch (move.type) {
-                case MoveType::Normal:
+                switch (act.type) {
+                case ActType::Normal:
                     break;
-                case MoveType::Castling:
+                case ActType::Castling:
                     // move rook
-                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].posX = move.toX+((move.toX<move.fromX)?1:-1);
-                    figures[idxAi*16+((move.toX<move.fromX)?2:3)].firstMoved = time+1;
+                    figures[idxAi*16+((act.toX<act.fromX)?2:3)].posX = act.toX+((act.toX<act.fromX)?1:-1);
+                    figures[idxAi*16+((act.toX<act.fromX)?2:3)].firstMoved = time+1;
                     break;
-                case MoveType::EnPassant:
+                case ActType::EnPassant:
                     for(int i = idxOp*16+8; i < 16*(idxOp+1); ++i) { // remove opponent pawn
-                        if (figures[i].posX == move.toX && figures[i].posY == move.fromY) {
+                        if (figures[i].posX == act.toX && figures[i].posY == act.fromY) {
                             figures[i].type = Figure::Unset;
                         }
                     }
                     break;
-                case MoveType::PromoteK:
+                case ActType::PromoteK:
                     figures[i].type = Figure::Knight;
                     break;
-                case MoveType::PromoteB:
+                case ActType::PromoteB:
                     figures[i].type = Figure::Bishop;
                     break;
-                case MoveType::PromoteR:
+                case ActType::PromoteR:
                     figures[i].type = Figure::Rook;
                     break;
-                case MoveType::PromoteQ:
+                case ActType::PromoteQ:
                     figures[i].type = Figure::Queen;
                     break;
-                case MoveType::CheckMate:
+                case ActType::CheckMate:
                     // checkmate is updated at opponents turn
                     figures[idxAi*16].type = Figure::Unset;
                     break;
-                case MoveType::Even:
+                case ActType::Even:
                     figures[idxAi*16].type = Figure::Unset;
                     figures[idxOp*16].type = Figure::Unset;
                     break;
@@ -388,16 +387,16 @@ public:
         return win;
     }
 
-    std::string getMoveDescription(const MoveType& move) const {
+    std::string getActionDescription(const ActType& act) const {
         const char figs[] = {'U', 'P', 'k', 'B', 'R', 'Q', 'K'};
         Figure::Type t1 = Figure::Unset;
         Figure::Type t2 = Figure::Unset;
         for (int i = 0; i < 16*2; ++i) {
             if (figures[i].type == Figure::Unset)
                 continue;
-            if (move.fromX == figures[i].posX && move.fromY == figures[i].posY)
+            if (act.fromX == figures[i].posX && act.fromY == figures[i].posY)
                 t1 = figures[i].type;
-            if (move.toX == figures[i].posX && move.toY == figures[i].posY)
+            if (act.toX == figures[i].posX && act.toY == figures[i].posY)
                 t2 = figures[i].type;
         }
         std::string str("X2X");
@@ -417,13 +416,13 @@ public:
         return str;
     }
 
-    ///! Interface, convert move to string
-    static std::string move2str(MoveType& move) {
-        return static_cast<std::string>(move);
+    ///! Interface, convert act to string
+    static std::string act2str(ActType& act) {
+        return static_cast<std::string>(act);
     }
 
     ///! Test function
-    static bool test_moves() {
+    static bool test_actions() {
         Chess chess;
         for(int i = 0; i < 32; ++i) {
             chess.figures[i].type = Figure::Unset;
@@ -447,27 +446,27 @@ public:
         chess.figures[16+8+4].posX = 1;
         chess.figures[16+8+4].posY = 4;
         chess.figures[16+8+4].firstMoved = 2;
-        MoveType moves[Chess::MaxMoves];
-        MoveCounterType nMoves = chess.getPossibleMoves(0, 0, moves);
+        ActType actions[Chess::MaxActions];
+        ActCounterType nActions = chess.getPossibleActions(0, 0, actions);
 
-        MoveType movePromote;
-        MoveType moveCastling;
-        MoveType moveEnPassant;
+        ActType movePromote;
+        ActType moveCastling;
+        ActType moveEnPassant;
         bool canPromote = false;
         bool canCastling = false;
         bool canEnPassant = false;
-        for (int i = 0; i < nMoves; ++i) {
-            if (moves[i].type == MoveType::PromoteQ) {
+        for (int i = 0; i < nActions; ++i) {
+            if (actions[i].type == ActType::PromoteQ) {
                 canPromote = true;
-                movePromote = moves[i];
+                movePromote = actions[i];
             }
-            if (moves[i].type == MoveType::Castling) {
+            if (actions[i].type == ActType::Castling) {
                 canCastling = true;
-                moveCastling = moves[i];
+                moveCastling = actions[i];
             }
-            if (moves[i].type == MoveType::EnPassant) {
+            if (actions[i].type == ActType::EnPassant) {
                 canEnPassant = true;
-                moveEnPassant = moves[i];
+                moveEnPassant = actions[i];
             }
         }
         if (!canCastling || !canEnPassant || !canPromote)
@@ -514,14 +513,14 @@ public:
             figures[2].type = Figure::Rook;
             figures[3].type = Figure::Rook;
             figures[16+0].type = Figure::King;
-            MoveType move;
-            move = MoveType(0,0,5,1);
+            ActType move;
+            move = ActType(0,0,5,1);
             update(move);
-            move = MoveType(4,7,6,7);
+            move = ActType(4,7,6,7);
             update(move);
-            move = MoveType(7,0,6,0);
+            move = ActType(7,0,6,0);
             update(move);
-            move = MoveType(6,7,7,7);
+            move = ActType(6,7,7,7);
             update(move);
             //WKing unmoved
             //WRook G1
@@ -540,6 +539,159 @@ public:
             nMoves = getPossibleMoves(0, 0, moves);
             return;
 #endif
+        }
+
+        if (m == 2) {
+            // https://index.hu/sport/sakk/2019/03/02/sakkfeladvany_otodik_resz
+            figures[0].type = Figure::King;
+            figures[4].type = Figure::Knight;
+            figures[16+0].type = Figure::King;
+            figures[16+8].type = Figure::Pawn;
+            ActType move;
+            move = ActType(4,0,5,0);
+            update(move);
+            move = ActType(4,7,7,0);
+            update(move);
+            move = ActType(1,0,4,4);
+            update(move);
+            move = ActType(0,6,7,2);
+            update(move);
+        }
+
+        if (m == 3) {
+            // https://index.hu/sport/sakk/2019/02/23/sakkfeladvany_negyedik_resz/
+            figures[0].type = Figure::King;
+            figures[4].type = Figure::Knight;
+            figures[16+0].type = Figure::King;
+            figures[16+4].type = Figure::Knight;
+            figures[16+8+7].type = Figure::Pawn;
+            ActType move;
+            move = ActType(4,0,5,7);
+            update(move);
+            move = ActType(4,7,7,7);
+            update(move);
+            move = ActType(1,0,5,4);
+            update(move);
+            move = ActType(1,7,7,5);
+            update(move);
+        }
+
+        if (m == 4) {
+            // https://index.hu/sport/sakk/2019/02/16/sakkfeladvany_3._resz/
+            figures[0].type = Figure::King;
+            figures[0].posX = 5;
+            figures[0].posY = 4;
+            figures[0].firstMoved = 1;
+            figures[2].type = Figure::Rook;
+            figures[2].posX = 0;
+            figures[2].posY = 3;
+            figures[2].firstMoved = 1;
+            figures[8].type = Figure::Pawn;
+            figures[8].posX = 6;
+            figures[8].posY = 2;
+            figures[8].firstMoved = 1;
+
+            figures[16+0].type = Figure::King;
+            figures[16+0].posX = 7;
+            figures[16+0].posY = 4;
+            figures[16+0].firstMoved = 2;
+            figures[16+1].type = Figure::Queen;
+            figures[16+1].posX = 4;
+            figures[16+1].posY = 6;
+            figures[16+1].firstMoved = 2;
+            figures[16+2].type = Figure::Rook;
+            figures[16+2].posX = 4;
+            figures[16+2].posY = 0;
+            figures[16+2].firstMoved = 2;
+            figures[16+3].type = Figure::Rook;
+            figures[16+3].posX = 7;
+            figures[16+3].posY = 0;
+            figures[16+3].firstMoved = 2;
+            figures[16+4].type = Figure::Knight;
+            figures[16+4].posX = 7;
+            figures[16+4].posY = 2;
+            figures[16+4].firstMoved = 2;
+            figures[16+8+6].type = Figure::Pawn;
+            figures[16+8+6].posX = 6;
+            figures[16+8+6].posY = 4;
+            figures[16+8+6].firstMoved = 2;
+            figures[16+8+7].type = Figure::Pawn;
+            figures[16+8+7].posX = 7;
+            figures[16+8+7].posY = 5;
+            figures[16+8+7].firstMoved = 2;
+
+            time = 2;
+        }
+
+        if (m == 5) {
+            // https://index.hu/sport/sakk/2019/03/09/carlsen_lepese_vb-donto/
+            figures[0].type = Figure::King;
+            figures[0].posX = 7;
+            figures[0].posY = 0;
+            figures[0].firstMoved = 1;
+            figures[1].type = Figure::Queen;
+            figures[1].posX = 5;
+            figures[1].posY = 3;
+            figures[1].firstMoved = 1;
+            figures[2].type = Figure::Rook;
+            figures[2].posX = 2;
+            figures[2].posY = 7;
+            figures[2].firstMoved = 1;
+            figures[3].type = Figure::Rook;
+            figures[3].posX = 5;
+            figures[3].posY = 4;
+            figures[3].firstMoved = 1;
+            figures[8+4].type = Figure::Pawn;
+            figures[8+4].posX = 4;
+            figures[8+4].posY = 3;
+            figures[8+4].firstMoved = 1;
+            figures[8+5].type = Figure::Pawn;
+            figures[8+5].posX = 5;
+            figures[8+5].posY = 2;
+            figures[8+5].firstMoved = 1;
+            figures[8+6].type = Figure::Pawn;
+            figures[8+6].posX = 7;
+            figures[8+6].posY = 4;
+            figures[8+6].firstMoved = 1;
+            figures[8+7].type = Figure::Pawn;
+            figures[8+7].posX = 7;
+            figures[8+7].posY = 1;
+            figures[8+7].firstMoved = 0;
+
+            figures[16+0].type = Figure::King;
+            figures[16+0].posX = 7;
+            figures[16+0].posY = 6;
+            figures[16+0].firstMoved = 2;
+            figures[16+1].type = Figure::Queen;
+            figures[16+1].posX = 5;
+            figures[16+1].posY = 1;
+            figures[16+1].firstMoved = 2;
+            figures[16+2].type = Figure::Rook;
+            figures[16+2].posX = 0;
+            figures[16+2].posY = 1;
+            figures[16+2].firstMoved = 2;
+            figures[16+6].type = Figure::Bishop;
+            figures[16+6].posX = 4;
+            figures[16+6].posY = 6;
+            figures[16+6].firstMoved = 2;
+            figures[16+8+1].type = Figure::Pawn;
+            figures[16+8+1].posX = 1;
+            figures[16+8+1].posY = 5;
+            figures[16+8+1].firstMoved = 2;
+            figures[16+8+3].type = Figure::Pawn;
+            figures[16+8+3].posX = 3;
+            figures[16+8+3].posY = 5;
+            figures[16+8+3].firstMoved = 2;
+            figures[16+8+5].type = Figure::Pawn;
+            figures[16+8+5].posX = 5;
+            figures[16+8+5].posY = 6;
+            figures[16+8+5].firstMoved = 0;
+            figures[16+8+6].type = Figure::Pawn;
+            figures[16+8+6].posX = 6;
+            figures[16+8+6].posY = 6;
+            figures[16+8+6].firstMoved = 0;
+
+            time = 2;
         }
     }
 };

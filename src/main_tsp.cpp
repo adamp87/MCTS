@@ -15,13 +15,13 @@
 typedef TSP_Vertex TSP;
 
 #ifdef _OPENMP
-typedef MCTreeDynamic<MCTSNodeBaseMT<TSP::MoveType> > TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBaseMT<TSP::ActType> > TreeContainer;
 
 // keep static_assert, might be usefull later
-static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<TSP::MoveType> > >::value,
+static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<TSP::ActType> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeDynamic<MCTSNodeBase<TSP::MoveType> > TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBase<TSP::ActType> > TreeContainer;
 #endif
 
 //typedef MCTS_Policy_Debug PolicyDebug;
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     // init program
     std::srand(seed);
     TSP state(input);
-    std::vector<TSP::MoveType> history;
+    std::vector<TSP::ActType> history;
     PolicyDebug policyDebug(writeTree, workDir, "tsp", timestamp);
     std::array<MCTS<TreeContainer, TSP, PolicyDebug>, 1> ai;
 
@@ -118,19 +118,19 @@ int main(int argc, char** argv) {
     // execute game
     for (int time = 0; !state.isFinished(); ++time) {
         int player = state.getPlayer(time);
-        TSP::MoveType move = ai[player].execute(player,
-                                                  maxRolloutDepth,
-                                                  state,
-                                                  policyIter[player],
-                                                  rolloutIter[player],
-                                                  history,
-                                                  rolloutCuda.get(),
-                                                  policyDebug);
-        state.update(move);
-        history.push_back(move);
+        TSP::ActType act = ai[player].execute(player,
+                                              maxRolloutDepth,
+                                              state,
+                                              policyIter[player],
+                                              rolloutIter[player],
+                                              history,
+                                              rolloutCuda.get(),
+                                              policyDebug);
+        state.update(act);
+        history.push_back(act);
 
         std::cout << "T" << time << " ";
-        std::cout << TSP::move2str(move) << " ";
+        std::cout << TSP::act2str(act) << " ";
         std::cout << state.getTourLength() << " ";
         std::cout << std::endl;
     }
