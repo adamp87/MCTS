@@ -340,6 +340,7 @@ public:
     }
 
     //! Interface, Compute W and P values for MCTS
+    //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType*, ActCounterType nActions, double* P, double& W) const {
         for (ActCounterType i = 0; i < nActions; ++i)
             P[i] = 0;
@@ -347,6 +348,7 @@ public:
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
+    //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER double computeMCTS_W(int idxAi) const {
         //weight = (np.exp(np.linspace(1, 0, 28))-1)/(np.exp(1)-1)
         const double weight[28] = { // normalize win -> value between 1..0
@@ -370,7 +372,10 @@ public:
             }
         }
 
-        return weight[winIdx];
+        if (idxAi == getPlayer())
+            return weight[winIdx];
+        else
+            return 1.0-weight[winIdx]; // opponent is trying to minimalize win rate of current player
     }
 
     //! Compute points for each player

@@ -93,7 +93,7 @@ private:
             auto it = TTree::getChildIterator(node);
             while (it.hasNext()) {
                 NodePtr child = it.next();
-                double val = value(child, subRootVisitLog, idxAi != state.getPlayer(), TProblem::UCT_C);
+                double val = value(child, subRootVisitLog, TProblem::UCT_C);
                 if (best_val < val) {
                     best = child;
                     best_val = val;
@@ -131,15 +131,13 @@ private:
     }
 
     //! Returns the value of a node for tree search evaluation
-    double value(const NodePtr& _node, double subRootVisitLog, bool isOpponent, double c) const {
+    double value(const NodePtr& _node, double subRootVisitLog, double c) const {
         const Node& node = *_node;
-        double q = node.W;
         double n = static_cast<double>(node.N);
         n += std::numeric_limits<double>::epsilon(); //avoid div by 0
+        double q = node.W / n;
 
-        if (isOpponent)
-            q = n-q; // opponent is trying to minimalize win
-        double val = q / n + c * sqrt(subRootVisitLog/n);
+        double val = q + c * sqrt(subRootVisitLog/n);
         return val;
     }
 
@@ -164,7 +162,7 @@ private:
         auto it = TTree::getChildIterator(node);
         while (it.hasNext()) {
             NodePtr child = it.next();
-            double val = value(child, nodeVisitLog, false, 0.0);
+            double val = value(child, nodeVisitLog, 0.0);
             if (best_val < val) {
                 best_ptr = child;
                 best_val = val;

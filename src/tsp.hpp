@@ -110,6 +110,7 @@ public:
     }
 
     //! Interface, Compute W and P values for MCTS
+    //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType*, ActCounterType nActions, double* P, double& W) const {
         for (ActCounterType i = 0; i < nActions; ++i)
             P[i] = 0;

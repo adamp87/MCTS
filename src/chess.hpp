@@ -132,9 +132,9 @@ public:
     */
     CUDA_CALLABLE_MEMBER ActCounterType getPossibleActions(int idxMe, int idxAi, ActType* actions, bool checkKing=true) const {
         // inspired by: https://codereview.stackexchange.com/questions/173656/chess-game-in-c
-        //TODO: cuda does not like lambda functions, should be refactored to build for cuda
-        ActCounterType nActions = 0;
+        //NOTE: cuda does not like lambda functions, should be refactored to build for cuda
         Figure board[8*8];
+        ActCounterType nActions = 0;
 
         auto getPos = [&] (int x, int y, int dx, int dy) -> int { return (y+dy)*8+x+dx; };
         auto isInsideBoard = [&] (int x, int y, int dx, int dy) -> bool { int xx=x+dx; int yy=y+dy; return 0<=xx && xx<8 && 0<=yy && yy<8; };
@@ -363,6 +363,7 @@ public:
     }
 
     //! Interface, Compute W and P values for MCTS
+    //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType* actions, ActCounterType nActions, double* P, double& W) const {
         (void)actions;
         for (ActCounterType i = 0; i < nActions; ++i)
@@ -371,6 +372,7 @@ public:
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
+    //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER double computeMCTS_W(int idxAi) const {
         const double figureValue[] = {0.0, 1.0, 3.0, 3.0, 5.0, 9.0, 4.0};
         double aiWin = 0.0;
@@ -392,7 +394,11 @@ public:
             return 0.0; // lost
         if (figures[idxOp*16].type == Figure::Unset)
             return 1.0; // won
-        return win;
+
+        if (idxAi == getPlayer())
+            return win;
+        else
+            return 1.0-win; // opponent is trying to minimalize win rate of current player
     }
 
     std::string getActionDescription(const ActType& act) const {
