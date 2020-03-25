@@ -63,27 +63,7 @@ private:
         ActType actions[TProblem::MaxActions];
         visited_nodes.push_back(node); // store subroot as policy
         while (!state.isFinished()) {
-#if 1 // compute possible moves once and store in container
-            { // thread-safe scope
-                LockGuard guard(*node); (void)guard;
-                if (node->nexts.isUnset()) { // get possible moves
-                    ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
-                    std::random_shuffle(actions, actions+nActions);
-                    node->nexts.init(actions, nActions);
-                    //node->nexts.test(actions, nActions);
-                }
-                if (!node->nexts.isEmpty()) { // node is not fully expanded
-                    ActType action;
-                    node->nexts.next(&action);
-                    state.update(action);
-                    // create child
-                    node = TTree::addNode(node, action);
-                    visited_nodes.push_back(node);
-                    return node;
-                }
-            } // end of thread-safe scope
-
-#else // compute possibleMoves every iter, remove duplicates
+#if 1  // compute possibleMoves every iter, remove duplicates
             ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
 
             { // thread-safe scope

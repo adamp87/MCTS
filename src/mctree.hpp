@@ -7,103 +7,6 @@
 #include <mutex>
 #include <atomic>
 
-#include <cstdlib>
-
-template <class TMove>
-struct MovesMeM {
-    int state;
-    std::vector<TMove> moves;
-
-    MovesMeM() : state(0) {}
-
-    bool isUnset() const { return state == 0;}
-    bool isEmpty() const { return state == 2;}
-
-    template <typename TMoveCount>
-    void init(TMove* _moves, TMoveCount nMoves) {
-        moves.insert(moves.end(), _moves, _moves+nMoves);
-        state = 1;
-    }
-
-    void next(TMove* move) {
-        *move = moves.back();
-        moves.pop_back();
-        if (moves.empty()) {
-            state = 2;
-        }
-    }
-};
-
-struct MovesOOC {
-    struct TmpFile {
-        int bytes;
-        FILE* tmpfile;
-        std::mutex lock;
-
-        TmpFile() {
-            bytes = 0;
-            tmpfile = std::tmpfile();
-        }
-
-        template <class TMove>
-        void read(TMove* move, int& posNext) {
-            std::lock_guard<std::mutex> guard(lock); (void)guard;
-            std::fseek(tmpfile, posNext, SEEK_SET);
-            int read = std::fread(move, sizeof(TMove), 1, tmpfile);
-            posNext += read * sizeof(TMove);
-        }
-
-        template <class TMove, typename TMoveCount>
-        void write(TMove* moves, TMoveCount nMoves, int& posNext, int& posEnd) {
-            std::lock_guard<std::mutex> guard(lock); (void)guard;
-            posNext = bytes;
-            std::fseek(tmpfile, bytes, SEEK_SET);
-            int count = std::fwrite(moves, sizeof(TMove), nMoves, tmpfile);
-            bytes += count * sizeof(TMove);
-            posEnd = bytes;
-        }
-    };
-
-    int state;
-    int posEnd;
-    int posNext;
-    static TmpFile tmp;
-
-    MovesOOC() : state(0), posEnd(0), posNext(0) {}
-
-    bool isUnset() const { return state == 0;}
-    bool isEmpty() const { return state == 2;}
-
-    template <class TMove, typename TMoveCount>
-    void init(TMove* moves, TMoveCount nMoves) {
-        tmp.write(moves, nMoves, posNext, posEnd);
-        state = 1;
-    }
-
-    template <class TMove>
-    void next(TMove* move) {
-        tmp.read(move, posNext);
-        if (posNext == posEnd) {
-            state = 2;
-        }
-    }
-
-    template <class TMove, typename TMoveCount>
-    void test(TMove* moves, TMoveCount nMoves) {
-        int pos = posNext;
-        for(unsigned int i = 0; i < nMoves; ++i) {
-            TMove move;
-            next(&move);
-            if (move == moves[i]) {
-            } else {
-                throw -1;
-            }
-        }
-        posNext = pos;
-        state = 1;
-    }
-};
-
 //! Base class for all Tree::Node implementations
 template <typename T_Act>
 struct MCTSNodeBase {
@@ -119,7 +22,6 @@ struct MCTSNodeBase {
     CountType   N;      //!< node visit count
     double      W;      //!< number of wins
     T_Act       action; //!< e.g. card played out
-    MovesMeM<T_Act>    nexts;
 
     MCTSNodeBase(const T_Act& action)
         : N(0), W(0.0), action(action)
@@ -160,7 +62,6 @@ struct MCTSNodeBaseMT {
     MyAtomicDouble          W;      //!< number of wins for each points
     T_Act                   action; //!< e.g. card played out
     std::mutex              lock;   //!< mutex for thread-safe policy
-    MovesMeM<T_Act>    nexts;
 
     MCTSNodeBaseMT(const T_Act& action)
         : N(0), W(0.0), action(action)
