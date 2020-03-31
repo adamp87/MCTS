@@ -65,19 +65,58 @@ private:
         std::int_fast16_t firstMoved;
 
         Figure() : type(Unset) { }
+
+        bool operator==(const Figure& other) const {
+            return type == other.type && playerIdx == other.playerIdx && firstMoved == other.firstMoved;
+        }
     };
     struct FigureSparse : public Figure {
         std::int_fast8_t posX;
         std::int_fast8_t posY;
+
+        bool operator==(const FigureSparse& other) const {
+            return posX == other.posX && posY == other.posY &&
+                    static_cast<Figure>(*this) == static_cast<Figure>(other);
+        }
+    };
+    struct StateSparse {
+        FigureSparse figures[2*16];
+
+        FigureSparse& operator[](int idx) {
+            return figures[idx];
+        }
+        const FigureSparse& operator[](int idx) const {
+            return figures[idx];
+        }
+        bool operator==(const StateSparse& other) const {
+            for (int i = 0; i < 2*16; ++i) {
+                if (!(figures[i] == other[i]))
+                    return false;
+            }
+            return true;
+        }
     };
 
+    StateSparse figures; //!< Sparse representation of chess figures
     std::int_fast16_t time; //!< current turn of the game
-    FigureSparse figures[2*16]; //!< Sparse representation of chess figures
+    std::int_fast16_t timeLastProgress; //!< last time when figure was taken or pawn moved
+    std::vector<StateSparse> history; //!< previous relevant board states, current state should not be part of it
+
+    int repetitions() const {
+        // note: moves are not checked, only if board has the same state
+        int count = 0;
+        for (int i = 0; i < history.size(); ++i) {
+            if (history[i] == figures)
+                count += 1;
+        }
+        return count;
+    }
 
 public:
     //! Set initial state
     Chess() {
         time = 0;
+        timeLastProgress = 0;
         for (int idxAi = 0; idxAi < 2; ++idxAi) {
             figures[0+16*idxAi].posX = 4;
             figures[0+16*idxAi].type = Figure::King;
@@ -209,6 +248,24 @@ public:
                     !isKingInCheck(x, y, 0, 0) && !isKingInCheck(x, y, +1, 0) && !isKingInCheck(x, y, +2, 0));
         };
 
+        // check repetitions count
+        if (repetitions() == 3) {
+            int king = idxAi * 16;
+            int x = figures[king].posX;
+            int y = figures[king].posY;
+            actions[0] = ActType(x,y,x,y,ActType::Even);
+            return 1;
+        }
+
+        // no progress have been made (50 turn rule)
+        if (time-timeLastProgress >= 100) {
+            int king = idxAi * 16;
+            int x = figures[king].posX;
+            int y = figures[king].posY;
+            actions[0] = ActType(x,y,x,y,ActType::Even);
+            return 1;
+        }
+
         // set up dense board
         for(int i = 0; i < 16*2; ++i) {
             if (figures[i].type == Figure::Unset)
@@ -311,15 +368,19 @@ public:
     CUDA_CALLABLE_MEMBER void update(ActType& act) {
         int idxAi = getPlayer(time);
         int idxOp = getPlayer(time+1);
+        history.push_back(figures);
         for(int i = idxAi*16; i < 16*(idxAi+1); ++i) {
             if (figures[i].type != Figure::Unset && figures[i].posX == act.fromX && figures[i].posY == act.fromY) {
                 figures[i].posX = act.toX;
                 figures[i].posY = act.toY;
+                if (figures[i].type == Figure::Pawn)
+                    timeLastProgress = time;
                 if (figures[i].firstMoved == 0)
                     figures[i].firstMoved = time+1;
                 for(int i = idxOp*16; i < 16*(idxOp+1); ++i) { // remove opponent figure
                     if (figures[i].posX == act.toX && figures[i].posY == act.toY) {
                         figures[i].type = Figure::Unset;
+                        timeLastProgress = time;
                     }
                 }
                 switch (act.type) {
