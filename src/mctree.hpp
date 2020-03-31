@@ -148,6 +148,11 @@ public:
         return ChildIterator(node);
     }
 
+    //! Return the number of childs of node, interface
+    size_t getChildCount(NodePtr& node) const {
+        return node->childs.size();
+    }
+
     //! Can be used for debug, interface for debug
     size_t getNodeId(NodePtr& node) const {
         return reinterpret_cast<size_t>(node);
@@ -277,6 +282,14 @@ public:
         return ChildIterator(node, nodes);
     }
 
+    //! Return the number of childs of node, interface
+    size_t getChildCount(NodePtr& node) {
+        size_t count = 0;
+        for (auto it = getChildIterator(node); it.hasNext(); it.next())
+            ++count;
+        return count;
+    }
+
     //! Can be used for debug, interface for debug
     size_t getNodeId(NodePtr& node) const {
         return node.idx;
@@ -404,6 +417,14 @@ public:
     //! Return an iterator to get childs of node, interface
     ChildIterator getChildIterator(NodePtr& node) {
         return ChildIterator(node, nodes);
+    }
+
+    //! Return the number of childs of node, interface
+    size_t getChildCount(NodePtr& node) {
+        size_t count = 0;
+        for (auto it = getChildIterator(node); it.hasNext(); it.next())
+            ++count;
+        return count;
     }
 
     //! Can be used for debug, interface for debug

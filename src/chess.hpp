@@ -52,7 +52,8 @@ public:
     };
 
     typedef std::uint_fast8_t ActCounterType; //!< interface
-    constexpr static double UCT_C = 0.1; //!< interface, constant for exploration in uct formula
+    constexpr static double UCT_C = 1.0; //!< interface, constant for exploration in uct formula
+    constexpr static double DirichletAlpha = 0.3; //!< interface
     constexpr static unsigned int MaxActions = 218; //!< interface: https://chess.stackexchange.com/questions/4490/maximum-possible-movement-in-a-turn
     constexpr static unsigned int MaxChildPerNode = MaxActions; //!< interface
 
@@ -367,7 +368,7 @@ public:
     CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType* actions, ActCounterType nActions, double* P, double& W) const {
         (void)actions;
         for (ActCounterType i = 0; i < nActions; ++i)
-            P[i] = 0;
+            P[i] = 1;
         W = computeMCTS_W(idxAi);
     }
 
@@ -389,16 +390,16 @@ public:
         // NOTE: if player has less points in tends not to change figures of same value
         double win = aiWin/(aiWin+opWin);
         if (figures[idxAi*16].type == Figure::Unset && figures[idxOp*16].type == Figure::Unset)
-            return 0.5; // even
+            return 0.0; // even
         if (figures[idxAi*16].type == Figure::Unset)
-            return 0.0; // lost
+            return -1.; // lost
         if (figures[idxOp*16].type == Figure::Unset)
             return 1.0; // won
 
         if (idxAi == getPlayer())
             return win;
         else
-            return 1.0-win; // opponent is trying to minimalize win rate of current player
+            return -win; // opponent is trying to minimalize win rate of current player
     }
 
     std::string getActionDescription(const ActType& act) const {

@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <limits>
+#include <random>
 #include <numeric>
 #include <algorithm>
 
@@ -35,6 +36,9 @@ class MCTS : public TTree {
     typedef typename TProblem::ActCounterType ActCounterType;
 
 private:
+    std::default_random_engine generator;
+
+private:
     //! Walk the tree according to the history of the problem
     NodePtr catchup(const TProblem& state, const std::vector<ActType>& history) {
         NodePtr node = TTree::getRoot();
@@ -61,6 +65,12 @@ private:
     NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes) {
         NodePtr node = subRoot;
         visited_nodes.push_back(node); // store subroot as policy
+
+        //dirchlet
+        double ratio = 0.75; // ratio of noise for root priors
+        std::vector<double> dirichlet(TTree::getChildCount(node));
+        computeDirichlet(dirichlet);
+
         while (!state.isFinished()) {
 
             if (node->N == 0) { // leaf node
@@ -84,21 +94,20 @@ private:
 
             // node fully expanded
             // set node to best leaf
+            // compute subRootVisit for each iteration, because of multithread
             NodePtr best = node; // init
             double best_val = -std::numeric_limits<double>::max();
-            // compute subRootVisit for each iteration, multithread
-            double subRootVisitLog = static_cast<double>(subRoot->N);
-            subRootVisitLog += std::numeric_limits<double>::epsilon(); // avoid log(0)
-            subRootVisitLog = log(subRootVisitLog);
-            auto it = TTree::getChildIterator(node);
-            while (it.hasNext()) {
-                NodePtr child = it.next();
-                double val = value(child, subRootVisitLog, TProblem::UCT_C);
+            double subRootVisitSqrt = sqrt(static_cast<ActCounterType>(subRoot->N));
+            for (auto it = std::make_pair(0, TTree::getChildIterator(node)); it.second.hasNext(); ++it.first) {
+                NodePtr child = it.second.next();
+                const int i = it.first % dirichlet.size(); // index not goes outofbounds for child notes
+                double val = getUCB(child, subRootVisitSqrt, ratio, dirichlet[i], TProblem::UCT_C);
                 if (best_val < val) {
                     best = child;
                     best_val = val;
                 }
             }
+            ratio = 1.0; // child nodes do not need dirichlet noise for priors
             node = best;
             visited_nodes.push_back(node);
             state.update(node->action);
@@ -107,6 +116,7 @@ private:
     }
 
     //! Applies the rollout step of the Tree Search
+    //! \todo change rand() function to c++ style
     bool rollout(TProblem& state, int idxAi, int maxRolloutDepth) const {
         int depth = 0; //if max is zero, until finished
         ActType actions[TProblem::MaxActions];
@@ -130,52 +140,65 @@ private:
         }
     }
 
-    //! Returns the value of a node for tree search evaluation
-    double value(const NodePtr& _node, double subRootVisitLog, double c) const {
-        const Node& node = *_node;
-        double n = static_cast<double>(node.N);
-        n += std::numeric_limits<double>::epsilon(); //avoid div by 0
-        double q = node.W / n;
+    //! Compute Dirichlet distribution
+    void computeDirichlet(std::vector<double>& dirichlet) const {
+        std::gamma_distribution<double> distribution(TProblem::DirichletAlpha);
+        std::generate(std::begin(dirichlet), std::end(dirichlet), std::bind(distribution, generator));
+        double sum = std::accumulate(std::begin(dirichlet), std::end(dirichlet), 0.0);
+        std::transform (std::begin(dirichlet), std::end(dirichlet),
+                        std::begin(dirichlet), std::bind2nd(std::divides<double>(), sum));
+    }
 
-        double val = q + c * sqrt(subRootVisitLog/n);
+    //! Returns the value of a node for tree search evaluation
+    double getUCB(const NodePtr& _node, double subRootVisitSqrt, double ratio, double dnoise, double c) const {
+        const Node& node = *_node;
+        double p = ratio * node.P + (1.0-ratio) * dnoise;
+        double n = static_cast<double>(node.N) + std::numeric_limits<double>::epsilon();
+        double q = node.W / n;
+        double u = p * (subRootVisitSqrt/(1+n));
+
+        double val = q + c*u;
         return val;
     }
 
-    ActType selectBestByVisit(NodePtr node) {
+    ActType selectMoveDeterministic(NodePtr node) {
         NodePtr most_ptr = node; // init
         CountType most_visit = 0;
         auto it = TTree::getChildIterator(node);
         while (it.hasNext()) {
             NodePtr child = it.next();
-            if (most_visit < child->visits) {
+            if (most_visit < child->N) {
                 most_ptr = child;
-                most_visit = child->visits;
+                most_visit = child->N;
             }
         }
         return most_ptr->action;
     }
 
-    ActType selectBestByValue(NodePtr node) {
-        NodePtr best_ptr = node; // init
-        double best_val = -std::numeric_limits<double>::max();
-        double nodeVisitLog = log(static_cast<double>(node->N));
-        auto it = TTree::getChildIterator(node);
-        while (it.hasNext()) {
+    ActType selectMoveStochastic(NodePtr node, double tau) {
+        std::vector<double> pi;
+        std::vector<NodePtr> childs;
+
+        // collect and compute pi
+        for (auto it = TTree::getChildIterator(node); it.hasNext(); ) {
             NodePtr child = it.next();
-            double val = value(child, nodeVisitLog, 0.0);
-            if (best_val < val) {
-                best_ptr = child;
-                best_val = val;
-            }
+            pi.push_back(pow(child->N, tau));
+            childs.push_back(child);
         }
-        return best_ptr->action;
-        // NOTE: use lower exploration rate for value computation to
-        //       avoid selection of a node, which has a low visit count
-        // NOTE: other solution to use constant zero, win ratio decides
+
+        // normalize
+        double sum = std::accumulate(std::begin(pi), std::end(pi), 0.0);
+        std::transform (std::begin(pi), std::end(pi),
+                        std::begin(pi), std::bind2nd(std::divides<double>(), sum));
+
+        // select
+        std::discrete_distribution<ActCounterType> distribution(pi.begin(), pi.end());
+        int select = distribution(generator);
+        return childs[select]->action;
     }
 
 public:
-    MCTS() { }
+    MCTS(int seed = 0) : generator(seed) { }
 
     //! Execute a search on the current state for the ai, return the action
     ActType execute(int idxAi,
@@ -189,16 +212,29 @@ public:
     {
         // walk tree according to history
         NodePtr subroot = catchup(cstate, history);
-        { // only one choice, dont think
-            ActType actions[TProblem::MaxActions];
-            ActCounterType nActions = cstate.getPossibleActions(idxAi, idxAi, actions);
-            if (nActions == 1) {
-                return actions[0];
-            }
+
+        { // make sure root is expanded before multithreaded execution
+            double W = 0;
+            TProblem state(cstate); // NOTE: copy of state is mandatory
+            std::vector<NodePtr> policyNodes;
+
+            // selection and expansion
+            NodePtr node = policy(subroot, state, idxAi, policyNodes);
+            policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, 0, history.size());
+            NodePtr child = policyNodes[1]; // store a child of the root
+
+            // backpropagation of policy node
+            W = node->W;
+            policyNodes.pop_back();
+            backprop(policyNodes, W);
+
+            // only one choice, dont think
+            if (TTree::getChildCount(subroot) == 1)
+                return child->action;
         }
 
         #pragma omp parallel for schedule(dynamic, 16)
-        for (int i = 0; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
+        for (int i = 1; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             double W = 0;
             TProblem state(cstate); // NOTE: copy of state is mandatory
             std::vector<NodePtr> policyNodes;
@@ -214,25 +250,30 @@ public:
             if (rolloutIter == 0)
                 continue; // no random rollout
 
-            policyNodes.push_back(node);
-            // rollout and backprop
-            if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, W))
-            { // rollout on gpu (if has gpu and requested, execute if gpu is free)
-                // NOTE: backprop one-by-one to decrease inconsistent increment in multithreading
-                for (unsigned int j = 0; j < rolloutIter; ++j)
-                    backprop(policyNodes, W);
-            } else { // rollout on cpu (fallback)
-                for (unsigned int j = 0; j < rolloutIter; ++j) {
-                    TProblem rstate(state); // NOTE: copy of state is mandatory
-                    rollout(rstate, idxAi, maxRolloutDepth);
-                    // backprop
-                    W = rstate.computeMCTS_W(idxAi);
-                    backprop(policyNodes, W);
+            { // rollout and backprop
+                policyNodes.push_back(node);
+                if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
+                    rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, W))
+                { // rollout on gpu (if has gpu and requested, execute if gpu is free)
+                    // NOTE: backprop one-by-one to decrease inconsistent increment in multithreading
+                    for (unsigned int j = 0; j < rolloutIter; ++j)
+                        backprop(policyNodes, W);
+                } else { // rollout on cpu (fallback)
+                    for (unsigned int j = 0; j < rolloutIter; ++j) {
+                        TProblem rstate(state); // NOTE: copy of state is mandatory
+                        rollout(rstate, idxAi, maxRolloutDepth);
+                        // backprop
+                        W = rstate.computeMCTS_W(idxAi);
+                        backprop(policyNodes, W);
+                    }
                 }
             }
         }
-        return selectBestByValue(subroot);
+
+        double tau = 1.0;
+        if (history.size()>30)
+            tau = 0.001;
+        return selectMoveStochastic(subroot, tau);
     }
 
     template <typename T>

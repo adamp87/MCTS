@@ -43,6 +43,7 @@ public:
     constexpr static double UCT_C = 1.4; //!< interface, constant for exploration in uct formula
     constexpr static unsigned int MaxActions = 127; //!< interface
     constexpr static unsigned int MaxChildPerNode = 127; //!< interface, TODO
+    constexpr static double DirichletAlpha = 0.3; //!< interface
 
 private:
     double lb;
@@ -113,7 +114,7 @@ public:
     //! * \param idxAi ID of player who executes function
     CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType*, ActCounterType nActions, double* P, double& W) const {
         for (ActCounterType i = 0; i < nActions; ++i)
-            P[i] = 0;
+            P[i] = 1;
         W = computeMCTS_W(idxAi);
     }
 

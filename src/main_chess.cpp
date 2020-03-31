@@ -151,11 +151,10 @@ int main(int argc, char** argv) {
     }
 
     // init program
-    std::srand(seed);
     Chess state;
     std::vector<Chess::ActType> history;
     PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
-    std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai;
+    std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai = {seed, seed};
     if (!state.test_actions()) {
         std::cout << "Error in logic" << std::endl;
         return -1;
