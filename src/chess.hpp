@@ -3,9 +3,10 @@
 
 #include <string>
 #include <vector>
-
 #include <numeric>
 #include <algorithm>
+
+#include <zmq.hpp>
 
 #ifdef __CUDACC__
 #define CUDA_CALLABLE_MEMBER __host__ __device__
@@ -101,12 +102,14 @@ private:
     std::int_fast16_t time; //!< current turn of the game
     std::int_fast16_t timeLastProgress; //!< last time when figure was taken or pawn moved
     std::vector<StateSparse> history; //!< previous relevant board states, current state should not be part of it
+    zmq::context_t& zmq_context; //!< zeromq context for socket connections
 
-    int repetitions() const {
+    int repetitions(const StateSparse& figs, int t_skip=0) const {
         // note: moves are not checked, only if board has the same state
         int count = 0;
-        for (int i = 0; i < history.size(); ++i) {
-            if (history[i] == figures)
+        for (auto it = history.rbegin()+t_skip; it != history.rend(); ++it) {
+            const StateSparse& hist = *it;
+            if (hist == figs)
                 count += 1;
         }
         return count;
@@ -114,7 +117,7 @@ private:
 
 public:
     //! Set initial state
-    Chess() {
+    Chess(zmq::context_t& zmq_context) : zmq_context(zmq_context) {
         time = 0;
         timeLastProgress = 0;
         for (int idxAi = 0; idxAi < 2; ++idxAi) {
@@ -249,7 +252,7 @@ public:
         };
 
         // check repetitions count
-        if (repetitions() == 3) {
+        if (repetitions(figures) == 3) {
             int king = idxAi * 16;
             int x = figures[king].posX;
             int y = figures[king].posY;
@@ -424,13 +427,179 @@ public:
         ++time;
     }
 
+    void getGameStateDNN(std::vector<float>& data, int idxMe) const {
+        const int T = 8;
+        const int p1_piece_start = 0;
+        const int p1_piece_count = 6 * T * 8 * 8;
+        const int p2_piece_start = p1_piece_start + p1_piece_count;
+        const int p2_piece_count = 6 * T * 8 * 8;
+        const int repetition_start = p2_piece_start + p2_piece_count;
+        const int repetition_count = 2 * T * 8 * 8;
+        const int color_start = repetition_start + repetition_count;
+        const int color_count = 8 * 8;
+        const int movecount_start = color_start + color_count;
+        const int movecount_count = 8 * 8;
+        const int p1_castlingL_start = movecount_start + movecount_count;
+        const int p1_castlingL_count = 8 * 8;
+        const int p1_castlingR_start = p1_castlingL_start + p1_castlingL_count;
+        const int p1_castlingR_count = 8 * 8;
+        const int p2_castlingL_start = p1_castlingR_start + p1_castlingR_count;
+        const int p2_castlingL_count = 8 * 8;
+        const int p2_castlingR_start = p2_castlingL_start + p2_castlingL_count;
+        const int p2_castlingR_count = 8 * 8;
+        const int noactioncount_start = p2_castlingR_start + p2_castlingR_count;
+        const int noactioncount_count = 8 * 8;
+
+        auto fill_player_piece = [&] (const StateSparse& figs, int idxPP, int p_piece_start, int t) -> void {
+            for (int i = idxPP*16; i < (idxPP+1)*16; ++i) {
+                const FigureSparse& fig = figs[i];
+                if (fig.type == Figure::Type::Unset)
+                    continue;
+
+                // flip board
+                int posY = fig.posY;
+                if (idxMe == 1 && idxPP == 1)
+                    posY = 7-posY;
+                if (idxMe == 1 && idxPP == 0)
+                    posY = -posY+7;
+
+                data[p_piece_start + t*8*8*6 + (int(fig.type)-1)*8*8 + posY*8+fig.posX] = 1.0f;
+            }
+        };
+
+        const int data_size = noactioncount_start + noactioncount_count;
+        data.resize(data_size, 0.0f);
+
+        int t = 0;
+        int idxOp = (idxMe + 1) % 2;
+        const StateSparse* figs = &figures;
+        while (t != T && time-t>=0) {
+            fill_player_piece(*figs, idxMe, p1_piece_start, t);
+            fill_player_piece(*figs, idxOp, p2_piece_start, t);
+
+            int count = repetitions(*figs, t);
+            std::fill(data.data()+repetition_start+ t*8*8,
+                      data.data()+repetition_start+ t*8*8 + std::min(count,2)*8*8,
+                      1.0f);
+
+            ++t;
+            if (time-t>=0)
+                figs = &history[history.size()-t];
+        }
+
+        float p1castleL = 0.0f;
+        float p1castleR = 0.0f;
+        float p2castleL = 0.0f;
+        float p2castleR = 0.0f;
+        {
+            ActCounterType nActions;
+            ActType actions[MaxActions];
+            nActions = getPossibleActions(idxMe, idxMe, actions);
+            for (ActCounterType i = 0; i < nActions; ++i) {
+                ActType& action = actions[i];
+                if (action.type != ActType::Castling)
+                    continue;
+                if (action.fromX < action.toX)
+                    p1castleR = 1.0f;
+                else
+                    p1castleL = 1.0f;
+            }
+            nActions = getPossibleActions(idxMe, idxOp, actions);
+            for (ActCounterType i = 0; i < nActions; ++i) {
+                ActType& action = actions[i];
+                if (action.type != ActType::Castling)
+                    continue;
+                if (action.fromX < action.toX)
+                    p2castleR = 1.0f;
+                else
+                    p2castleL = 1.0f;
+            }
+        }
+
+        std::fill(data.data()+color_start, data.data() + color_start+color_count, getPlayer(time));
+        std::fill(data.data()+movecount_start, data.data() + movecount_start+movecount_count, time/200.0f);
+        std::fill(data.data()+p1_castlingL_start, data.data() + p1_castlingL_start+p1_castlingL_count, p1castleL);
+        std::fill(data.data()+p1_castlingR_start, data.data() + p1_castlingR_start+p1_castlingR_count, p1castleR);
+        std::fill(data.data()+p2_castlingL_start, data.data() + p2_castlingL_start+p2_castlingL_count, p2castleL);
+        std::fill(data.data()+p2_castlingR_start, data.data() + p2_castlingR_start+p2_castlingR_count, p2castleR);
+        std::fill(data.data()+noactioncount_start, data.data() + noactioncount_start+noactioncount_count, (time-timeLastProgress)/100.0f);
+    }
+
+    void getPolicyTrainDNN(std::vector<float>& data, int idxMe, std::vector<std::pair<ActType, double> >& piAction) const {
+        data.resize(8*8, -std::numeric_limits<float>::infinity());
+        for (size_t i = 0; i < piAction.size(); ++i) {
+            const ActType& action = piAction[i].first;
+            float pi = static_cast<float>(piAction[i].second);
+
+            int fromY = action.fromY;
+            if (idxMe == 1)
+                fromY = 7-fromY;// flip board
+            data[fromY*8+action.fromX] = std::max(pi, data[fromY*8+action.fromX]);
+        }
+    }
+
+    void storeGamePolicyDNN(std::vector<float>& game, std::vector<float>& policy) const {
+        //connect socket
+        zmq::socket_t socket(zmq_context, ZMQ_REQ);
+        socket.connect("tcp://localhost:5557");
+
+        //send game
+        zmq::message_t request1(game.size()*sizeof(float));
+        memcpy(request1.data(), game.data(), game.size()*sizeof(float));
+        socket.send(request1);
+
+        //get the reply
+        char ok[2];
+        zmq::message_t reply;
+        socket.recv(&reply);
+        memcpy(ok, reply.data(), 2);
+        if (ok[0] != 4 || ok[1] != 2)
+            throw std::runtime_error("Could not store gamestate");
+
+        //send game
+        zmq::message_t request2(policy.size()*sizeof(float));
+        memcpy(request2.data(), policy.data(), policy.size()*sizeof(float));
+        socket.send(request2);
+
+        //get the reply
+        socket.recv(&reply);
+        memcpy(ok, reply.data(), 2);
+        if (ok[0] != 4 || ok[1] != 2)
+            throw std::runtime_error("Could not store gamepolicy");
+    }
+
     //! Interface, Compute W and P values for MCTS
-    //! * \param idxAi ID of player who executes function
-    CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxAi, ActType* actions, ActCounterType nActions, double* P, double& W) const {
-        (void)actions;
-        for (ActCounterType i = 0; i < nActions; ++i)
-            P[i] = 1;
-        W = computeMCTS_W(idxAi);
+    //! * \param idxMe ID of player who executes function
+    CUDA_CALLABLE_MEMBER void computeMCTS_WP(int idxMe, ActType* actions, ActCounterType nActions, double* P, double& W) const {
+
+        std::vector<float> state_dnn;
+        getGameStateDNN(state_dnn, idxMe);
+
+        //connect socket
+        zmq::socket_t socket(zmq_context, ZMQ_REQ);
+        socket.connect("tcp://localhost:5555");
+
+        //send request
+        zmq::message_t request(state_dnn.size()*sizeof(float));
+        memcpy(request.data(), state_dnn.data(), state_dnn.size()*sizeof(float));
+        socket.send(request);
+
+        //get the reply
+        zmq::message_t reply;
+        socket.recv(&reply);
+        std::vector<float> result(reply.size() / sizeof(float));
+        memcpy(result.data(), reply.data(), reply.size());
+        if (result.size() != 65)
+            throw std::runtime_error("Bad Reply");
+        socket.close();
+
+        W = computeMCTS_W(idxMe);//result[64];
+        for (ActCounterType i = 0; i < nActions; ++i) {
+            int fromY = actions[i].fromY;
+            if (idxMe == 1)
+                fromY = 7-fromY;// flip board
+            P[i] = result[fromY*8+actions[i].fromX];
+        }
     }
 
     //! Interface, Compute win value for MCTreeSearch, between 0-1
@@ -511,7 +680,8 @@ public:
 
     ///! Test function
     static bool test_actions() {
-        Chess chess;
+        zmq::context_t dummy(1);
+        Chess chess(dummy);
         for(int i = 0; i < 32; ++i) {
             chess.figures[i].type = Figure::Unset;
         }

@@ -8,12 +8,13 @@ set(CMAKE_CXX_STANDARD 11)
 add_executable("TSP" src/mcts.cpp
                      src/main_tsp.cpp)
 
+add_executable("Hearts" src/mcts.cpp
+                     src/flownetwork.cpp
+                     src/main_hearts.cpp)
+
 add_executable("Chess" src/mcts.cpp
                        src/main_chess.cpp)
-
-add_executable("Hearts" src/mcts.cpp
-                        src/flownetwork.cpp
-                        src/main_hearts.cpp)
+target_link_libraries("Chess" PUBLIC zmq.so)
 
 if (CUDA_FOUND)
     message (STATUS "Found CUDA${CUDA_VERSION_STRING}")

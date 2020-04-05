@@ -7,6 +7,7 @@
 #include <random>
 #include <numeric>
 #include <algorithm>
+#include <iostream>
 
 #include "mcts.cuh"
 #include "mcts_debug.hpp"
@@ -175,14 +176,14 @@ private:
         return most_ptr->action;
     }
 
-    ActType selectMoveStochastic(NodePtr node, double tau) {
+    ActType selectMoveStochastic(NodePtr node, double tau, std::vector<std::pair<ActType, double> >& piAction) {
         std::vector<double> pi;
         std::vector<NodePtr> childs;
 
         // collect and compute pi
         for (auto it = TTree::getChildIterator(node); it.hasNext(); ) {
             NodePtr child = it.next();
-            pi.push_back(pow(child->N, tau));
+            pi.push_back(pow(child->N, 1.0/tau));
             childs.push_back(child);
         }
 
@@ -190,6 +191,11 @@ private:
         double sum = std::accumulate(std::begin(pi), std::end(pi), 0.0);
         std::transform (std::begin(pi), std::end(pi),
                         std::begin(pi), std::bind2nd(std::divides<double>(), sum));
+
+        // store pi/action for dataset
+        for (size_t i = 0; i < pi.size(); ++i) {
+            piAction.push_back(std::make_pair(childs[i]->action, pi[i]));
+        }
 
         // select
         std::discrete_distribution<ActCounterType> distribution(pi.begin(), pi.end());
@@ -231,9 +237,10 @@ public:
             // only one choice, dont think
             if (TTree::getChildCount(subroot) == 1)
                 return child->action;
+            }
         }
 
-        #pragma omp parallel for schedule(dynamic, 16)
+        #pragma omp parallel for schedule(dynamic, 6)
         for (int i = 1; i < (int)policyIter; ++i) { // signed int to support omp2 for msvc
             double W = 0;
             TProblem state(cstate); // NOTE: copy of state is mandatory
@@ -271,9 +278,31 @@ public:
         }
 
         double tau = 1.0;
-        if (history.size()>30)
-            tau = 0.001;
-        return selectMoveStochastic(subroot, tau);
+        if (history.size()>60) tau = 0.001;
+        std::vector<std::pair<ActType, double> > piAction;
+        ActType action = selectMoveStochastic(subroot, tau, piAction);
+
+#if 0
+        action = selectMoveDeterministic(subroot); // TEMP
+        for (auto it = std::make_pair(0, TTree::getChildIterator(subroot)); it.second.hasNext(); ++it.first) {
+            NodePtr child = it.second.next();
+            double pi = piAction[it.first].second;
+            std::cout << TProblem::act2str(child->action) << "; "
+                      << "Pi: " << pi << "; "
+                      << "W: " << child->W << "; "
+                      << "N: " << child->N << "; "
+                      << "Q: " << child->W/child->N
+                      << std::endl;
+        }
+#endif
+
+        std::vector<float> stateDNN;
+        std::vector<float> policyDNN;
+        cstate.getGameStateDNN(stateDNN, idxAi);
+        cstate.getPolicyTrainDNN(policyDNN, idxAi, piAction);
+        cstate.storeGamePolicyDNN(stateDNN, policyDNN);
+
+        return action;
     }
 
     template <typename T>

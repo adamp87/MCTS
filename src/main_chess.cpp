@@ -151,7 +151,8 @@ int main(int argc, char** argv) {
     }
 
     // init program
-    Chess state;
+    zmq::context_t zmq_context(16);
+    Chess state(zmq_context);
     std::vector<Chess::ActType> history;
     PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
     std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai = {seed, seed};

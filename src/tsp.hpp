@@ -145,6 +145,18 @@ public:
         }
         return sum;
     }
+
+    void getGameStateDNN(std::vector<float>&, int) const {
+
+    }
+
+    void getPolicyTrainDNN(std::vector<float>&, int, std::vector<std::pair<ActType, double> >&) const {
+
+    }
+
+    void storeGamePolicyDNN(std::vector<float>&, std::vector<float>&) const {
+
+    }
 };
 
 //! TODO

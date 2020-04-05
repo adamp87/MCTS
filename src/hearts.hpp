@@ -400,6 +400,18 @@ public:
         str[1] = values[act % 13];
         return str;
     }
+
+    void getGameStateDNN(std::vector<float>&, int) const {
+
+    }
+
+    void getPolicyTrainDNN(std::vector<float>&, int, std::vector<std::pair<ActType, double> >&) const {
+
+    }
+
+    void storeGamePolicyDNN(std::vector<float>&, std::vector<float>&) const {
+
+    }
 };
 
 #endif //HEARTS_HPP
