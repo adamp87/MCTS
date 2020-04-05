@@ -451,16 +451,28 @@ public:
         // NOTE: if player has less points in tends not to change figures of same value
         double win = aiWin/(aiWin+opWin);
         if (figures[idxAi*16].type == Figure::Unset && figures[idxOp*16].type == Figure::Unset)
-            return 0.0; // even
+            return 0.5; // even
         if (figures[idxAi*16].type == Figure::Unset)
-            return -1.; // lost
+            return 0.0; // lost
         if (figures[idxOp*16].type == Figure::Unset)
             return 1.0; // won
+        return win;
 
-        if (idxAi == getPlayer())
-            return win;
-        else
-            return -win; // opponent is trying to minimalize win rate of current player
+        //Discussion: during tree search, the algorithm always tries to maximise the win value.
+        //When actions of opponents are traversed, the algorithm will rather visit actions,
+        //that are good for him and not what good for the opponent is.
+        //This means, if opponent can hit a figure,
+        //it will rather visit moves which does not hit the figure.
+        //For this reason, during tree search it was alternating the UCB value,
+        //because opponent is trying to minimize current players win.
+        //DNN based W computation will not require this alternation.
+        //It is not good to alternate directly here the win value,
+        //when computing for opponent it will increase the win value
+        //for current player when it loses a figure.
+        //if (idxAi == getPlayer(time+1))
+        //    return win;
+        //else
+        //    return 1.0-win; // opponent is trying to minimalize win rate of current player
     }
 
     std::string getActionDescription(const ActType& act) const {
