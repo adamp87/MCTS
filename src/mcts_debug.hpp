@@ -65,7 +65,7 @@ public:
             //NOTE: must start from 1, 0 is the subroot and it should not be used to update
             NodePtr node = policyNodes[depth];
 
-            double value = tree.value(node, log(static_cast<double>(subRoot->N)), state.getPlayer() != idxAi, TProblem::UCT_C);
+            double value = tree.getUCB(node, sqrt(static_cast<double>(subRoot->N)), 1.0, 0.0, TProblem::UCT_C);
             state.update(node->action);
             txt << tree.getNodeId(node) << ";";
             txt << tree.getNodeId(parent) << ";";

@@ -56,7 +56,7 @@ __global__ void rollout(int idxAi,
     // Copy state back to global memory
     d_rnd[idx] = localRnd;
 
-    u_result[idx] = state.computeMCTSWin(idxAi);
+    u_result[idx] = state.computeMCTS_W(idxAi);
 }
 
 __global__ void setup_random(curandState* state, unsigned int seed) {
