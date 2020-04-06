@@ -63,7 +63,7 @@ private:
     }
 
     //! Applies the policy step of the Tree Search
-    NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes) {
+    NodePtr policy(const NodePtr subRoot, TProblem& state, int idxAi, std::vector<NodePtr>& visited_nodes, double& W) {
         NodePtr node = subRoot;
         visited_nodes.push_back(node); // store subroot as policy
 
@@ -74,10 +74,9 @@ private:
 
         while (!state.isFinished()) {
 
-            if (node->N == 0) { // leaf node
-                LockGuard guard(*node); (void)guard; // thread-safe scope
-                if (node->N == 0) { // leaf node
-                    double W;
+            if (node->N == 0) { // leaf node, N will be increased by backprop
+                LockGuard guard(*node); (void)guard; // thread-safe scope on current leaf node
+                if (TTree::getChildCount(node) == 0) { // enter if have no child
                     double P[TProblem::MaxActions];
                     ActType actions[TProblem::MaxActions];
 
@@ -87,8 +86,6 @@ private:
                         NodePtr n = TTree::addNode(node, actions[i]);
                         n->P = P[i];
                     }
-                    node->W += W;
-                    node->N = 1; // keep last
                     return node;
                 }
             }
@@ -113,6 +110,10 @@ private:
             visited_nodes.push_back(node);
             state.update(node->action);
         }
+
+        //evaluate board win value also on terminating nodes
+        state.computeMCTS_WP(idxAi, NULL, 0, NULL, W);
+
         return node;
     }
 
@@ -225,13 +226,11 @@ public:
             std::vector<NodePtr> policyNodes;
 
             // selection and expansion
-            NodePtr node = policy(subroot, state, idxAi, policyNodes);
+            NodePtr node = policy(subroot, state, idxAi, policyNodes, W);
             policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, 0, history.size());
             NodePtr child = policyNodes[1]; // store a child of the root
 
             // backpropagation of policy node
-            W = node->W;
-            policyNodes.pop_back();
             backprop(policyNodes, W);
 
             // only one choice, dont think
@@ -247,18 +246,15 @@ public:
             std::vector<NodePtr> policyNodes;
 
             // selection and expansion
-            NodePtr node = policy(subroot, state, idxAi, policyNodes);
+            NodePtr node = policy(subroot, state, idxAi, policyNodes, W);
             policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, i, history.size());
 
             // backpropagation of policy node
-            W = node->W;
-            policyNodes.pop_back();
             backprop(policyNodes, W);
             if (rolloutIter == 0)
                 continue; // no random rollout
 
             { // rollout and backprop
-                policyNodes.push_back(node);
                 if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
                     rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, W))
                 { // rollout on gpu (if has gpu and requested, execute if gpu is free)
