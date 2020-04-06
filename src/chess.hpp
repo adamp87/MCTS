@@ -381,7 +381,7 @@ public:
                 if (figures[i].firstMoved == 0)
                     figures[i].firstMoved = time+1;
                 for(int i = idxOp*16; i < 16*(idxOp+1); ++i) { // remove opponent figure
-                    if (figures[i].posX == act.toX && figures[i].posY == act.toY) {
+                    if (figures[i].type != Figure::Unset && figures[i].posX == act.toX && figures[i].posY == act.toY) {
                         figures[i].type = Figure::Unset;
                         timeLastProgress = time;
                     }
