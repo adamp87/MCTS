@@ -228,13 +228,13 @@ public:
             // selection and expansion
             NodePtr node = policy(subroot, state, idxAi, policyNodes, W);
             policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, 0, history.size());
-            NodePtr child = policyNodes[1]; // store a child of the root
 
             // backpropagation of policy node
             backprop(policyNodes, W);
 
             // only one choice, dont think
-            if (TTree::getChildCount(subroot) == 1)
+            if (TTree::getChildCount(subroot) == 1) {
+                NodePtr child = TTree::getChildIterator(subroot).next();
                 return child->action;
             }
         }
