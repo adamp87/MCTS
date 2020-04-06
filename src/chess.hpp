@@ -153,8 +153,8 @@ public:
     }
 
     //! Interface
-    CUDA_CALLABLE_MEMBER int getPlayer(int time = 255) const {
-        if (time == 255)
+    CUDA_CALLABLE_MEMBER int getPlayer(int time=-1) const {
+        if (time == -1)
             time = this->time;
         return time%2;
     }
