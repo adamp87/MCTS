@@ -274,7 +274,7 @@ public:
         }
 
         double tau = 1.0;
-        if (history.size()>60) tau = 0.001;
+        if (history.size()>60) tau = 0.05;
         std::vector<std::pair<ActType, double> > piAction;
         ActType action = selectMoveStochastic(subroot, tau, piAction);
 
