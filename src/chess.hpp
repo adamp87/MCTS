@@ -102,6 +102,8 @@ private:
     std::int_fast16_t time; //!< current turn of the game
     std::int_fast16_t timeLastProgress; //!< last time when figure was taken or pawn moved
     std::vector<StateSparse> history; //!< previous relevant board states, current state should not be part of it
+
+    std::string ports[2]; //!< ports for zeromq socket connections: white, black
     zmq::context_t& zmq_context; //!< zeromq context for socket connections
 
     int repetitions(const StateSparse& figs, int t_skip=0) const {
@@ -117,7 +119,11 @@ private:
 
 public:
     //! Set initial state
-    Chess(zmq::context_t& zmq_context) : zmq_context(zmq_context) {
+    Chess(zmq::context_t& zmq_context, const std::string& portW, const std::string& portB)
+        : zmq_context(zmq_context)
+    {
+        ports[0] = portW;
+        ports[1] = portB;
         time = 0;
         timeLastProgress = 0;
         for (int idxAi = 0; idxAi < 2; ++idxAi) {
@@ -575,9 +581,21 @@ public:
         std::vector<float> state_dnn;
         getGameStateDNN(state_dnn, idxMe);
 
+        if (ports[idxMe] == "0") {
+            // compute W based on figure count, no dnn
+            W = computeMCTS_W(idxMe);
+            for (ActCounterType i = 0; i < nActions; ++i) {
+                int fromY = actions[i].fromY;
+                if (idxMe == 1)
+                    fromY = 7-fromY;// flip board
+                P[i] = 1.0;
+            }
+            return;
+        }
+
         //connect socket
         zmq::socket_t socket(zmq_context, ZMQ_REQ);
-        socket.connect("tcp://localhost:5555");
+        socket.connect(ports[idxMe]);
 
         //send request
         zmq::message_t request(state_dnn.size()*sizeof(float));
@@ -681,7 +699,7 @@ public:
     ///! Test function
     static bool test_actions() {
         zmq::context_t dummy(1);
-        Chess chess(dummy);
+        Chess chess(dummy, "", "");
         for(int i = 0; i < 32; ++i) {
             chess.figures[i].type = Figure::Unset;
         }

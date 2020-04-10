@@ -94,22 +94,26 @@ Chess::ActType getCmdInput(const Chess& state, int player) {
 
 int main(int argc, char** argv) {
     int writeTree = 0;
-    int maxRolloutDepth = 8;
+    int maxRolloutDepth = 0;
     std::string workDir = "";
+    bool isDeterministic = true;
+    std::string portWhite = "tcp://localhost:5555";
+    std::string portBlack = "tcp://localhost:5555";
     auto timestamp = std::time(0);
     unsigned int seed = getSeed();
-    unsigned int policyIter[2] = {5000, 25000};
-    unsigned int rolloutIter[2] = {1, 1};
+    unsigned int policyIter[2] = {1600, 1600};
+    unsigned int rolloutIter[2] = {0, 0};
 
     if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
         std::cout << "Paramaters:" << std::endl;
+        std::cout << "deterministic 1 (deterministic, or 0 for stochastic)" << std::endl;
+        std::cout << "portW tcp://localhost:5555 (port for DNN decisions)" << std::endl;
+        std::cout << "portB tcp://localhost:5555 (port for DNN decisions)" << std::endl;
         std::cout << "writeTree 0" << std::endl;
         std::cout << "workDir path/" << std::endl;
         std::cout << "seed 123" << std::endl;
         std::cout << "p0 100 (policy iteration for player0, zero for human player)" << std::endl;
         std::cout << "p[1] 100" << std::endl;
-        std::cout << "r0 100 (rollout iteration for player0)" << std::endl;
-        std::cout << "r[1] 100" << std::endl;
         return 0;
     }
 
@@ -123,20 +127,20 @@ int main(int argc, char** argv) {
         std::string val(argv[i+1]);
         if (key == "writeTree") {
             writeTree = (val != "0");
+        } else if (key == "deterministic") {
+            isDeterministic = (val != "0");
         } else if (key == "seed") {
             seed = std::stoi(val);
         } else if (key == "workDir") {
             workDir = val;
-        } else if (key == "maxRolloutDepth") {
-            maxRolloutDepth = std::stoi(val);
+        } else if (key == "portW") {
+            portWhite = val;
+        } else if (key == "portB") {
+            portBlack = val;
         } else if (key == "p0") {
             policyIter[0] = std::stoi(val);
         } else if (key == "p1") {
             policyIter[1] = std::stoi(val);
-        } else if (key == "r0") {
-            rolloutIter[0] = std::stoi(val);
-        } else if (key == "r1") {
-            rolloutIter[1] = std::stoi(val);
         } else {
             std::cout << "Unknown Key: " << key << std::endl;
             return -1;
@@ -144,16 +148,18 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "Seed " << seed << std::endl;
-    std::cout << "MaxRolloutDepth " << maxRolloutDepth << std::endl;
+    std::cout << "Port White: " << portWhite << std::endl;
+    std::cout << "Port Black: " << portBlack << std::endl;
+    std::cout << "Deterministic: " << isDeterministic << std::endl;
     std::cout << "Results at: " << (writeTree == 0 ? "Disabled" : workDir) << std::endl;
     for (int i = 0; i < 2; ++i) {
-        std::cout << "P" << i << " PIter: " << policyIter[i] << " Riter: " << rolloutIter[i] << std::endl;
+        std::cout << "P" << i << " PIter: " << policyIter[i] << std::endl;
     }
 
     // init program
     zmq::context_t zmq_context(16);
-    Chess state(zmq_context);
     std::vector<Chess::ActType> history;
+    Chess state(zmq_context, portWhite, portBlack);
     PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
     std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai = {seed, seed};
     if (!state.test_actions()) {
