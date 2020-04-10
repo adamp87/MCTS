@@ -203,6 +203,7 @@ int main(int argc, char** argv) {
         std::cout << std::chrono::duration_cast<std::chrono::seconds>(t1-t0).count() << " sec";
         std::cout << std::endl;
     }
+    std::cout << state.getEndOfGameString() << std::endl;
 
     // save tree
     for (int p = 0; p < 2; ++p) {

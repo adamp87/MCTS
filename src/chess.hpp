@@ -668,6 +668,16 @@ public:
         //    return 1.0-win; // opponent is trying to minimalize win rate of current player
     }
 
+    std::string getEndOfGameString() const {
+        if (figures[0].type == Figure::Unset && figures[16].type == Figure::Unset)
+            return std::string("Even!");
+        if (figures[0].type == Figure::Unset)
+            return std::string("Black Wins!");
+        if (figures[16].type == Figure::Unset)
+            return std::string("White Wins!");
+        return std::string("Error");
+    }
+
     std::string getActionDescription(const ActType& act) const {
         const char figs[] = {'U', 'P', 'k', 'B', 'R', 'Q', 'K'};
         Figure::Type t1 = Figure::Unset;
