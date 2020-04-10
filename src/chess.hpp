@@ -532,7 +532,7 @@ public:
     }
 
     void getPolicyTrainDNN(std::vector<float>& data, int idxMe, std::vector<std::pair<ActType, double> >& piAction) const {
-        data.resize(8*8, -std::numeric_limits<float>::infinity());
+        data.resize(8*8, 0.0);
         for (size_t i = 0; i < piAction.size(); ++i) {
             const ActType& action = piAction[i].first;
             float pi = static_cast<float>(piAction[i].second);
@@ -540,7 +540,7 @@ public:
             int fromY = action.fromY;
             if (idxMe == 1)
                 fromY = 7-fromY;// flip board
-            data[fromY*8+action.fromX] = std::max(pi, data[fromY*8+action.fromX]);
+            data[fromY*8+action.fromX] += pi;
         }
     }
 
@@ -611,12 +611,18 @@ public:
             throw std::runtime_error("Bad Reply");
         socket.close();
 
-        W = computeMCTS_W(idxMe);//result[64];
+        W = result[64];
+        double pi_sum = 0;
         for (ActCounterType i = 0; i < nActions; ++i) {
             int fromY = actions[i].fromY;
             if (idxMe == 1)
                 fromY = 7-fromY;// flip board
-            P[i] = result[fromY*8+actions[i].fromX];
+            P[i] = exp(result[fromY*8+actions[i].fromX]); //softmax
+            pi_sum += P[i];
+        }
+        // apply softmax on valid actions
+        for (ActCounterType i = 0; i < nActions; ++i) {
+            P[i] /= pi_sum;
         }
     }
 
