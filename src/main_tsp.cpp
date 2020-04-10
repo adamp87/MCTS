@@ -119,6 +119,7 @@ int main(int argc, char** argv) {
         int player = state.getPlayer(time);
         TSP::ActType act = ai[player].execute(player,
                                               maxRolloutDepth,
+                                              true,
                                               state,
                                               policyIter[player],
                                               rolloutIter[player],

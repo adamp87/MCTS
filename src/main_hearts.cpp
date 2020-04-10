@@ -142,6 +142,7 @@ int main(int argc, char** argv) {
             int player = state.getPlayer(round * 4 + turn);
             uint8 card = ai[player].execute(player,
                                             0,
+                                            true,
                                             state,
                                             policyIter[player],
                                             rolloutIter[player],

@@ -184,6 +184,7 @@ int main(int argc, char** argv) {
                                getCmdInput(state, player) :
                                ai[player].execute(player,
                                                   maxRolloutDepth,
+                                                  isDeterministic,
                                                   state,
                                                   policyIter[player],
                                                   rolloutIter[player],

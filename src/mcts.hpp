@@ -210,6 +210,7 @@ public:
     //! Execute a search on the current state for the ai, return the action
     ActType execute(int idxAi,
                     int maxRolloutDepth,
+                    bool isDeterministic,
                     const TProblem& cstate,
                     unsigned int policyIter,
                     unsigned int rolloutIter,
@@ -273,32 +274,46 @@ public:
             }
         }
 
-        double tau = 1.0;
-        if (history.size()>60) tau = 0.05;
-        std::vector<std::pair<ActType, double> > piAction;
-        ActType action = selectMoveStochastic(subroot, tau, piAction);
+        if (isDeterministic) {
+            ActType action = selectMoveDeterministic(subroot);
 
-#if 0
-        action = selectMoveDeterministic(subroot); // TEMP
-        for (auto it = std::make_pair(0, TTree::getChildIterator(subroot)); it.second.hasNext(); ++it.first) {
-            NodePtr child = it.second.next();
-            double pi = piAction[it.first].second;
-            std::cout << TProblem::act2str(child->action) << "; "
-                      << "Pi: " << pi << "; "
-                      << "W: " << child->W << "; "
-                      << "N: " << child->N << "; "
-                      << "Q: " << child->W/child->N
-                      << std::endl;
+            for (auto it = TTree::getChildIterator(subroot); it.hasNext(); ) {
+                NodePtr child = it.next();
+                std::cout << TProblem::act2str(child->action) << "; "
+                          << "W: " << child->W << "; "
+                          << "N: " << child->N << "; "
+                          << "Q: " << child->W/child->N
+                          << std::endl;
+            }
+
+            return action;
+
+        } else { // stochastic
+            double tau = 1.0;
+            if (history.size()>60)
+                tau = 0.05;
+            std::vector<float> stateDNN;
+            std::vector<float> policyDNN;
+            std::vector<std::pair<ActType, double> > piAction;
+
+            ActType action = selectMoveStochastic(subroot, tau, piAction);
+            cstate.getGameStateDNN(stateDNN, idxAi);
+            cstate.getPolicyTrainDNN(policyDNN, idxAi, piAction);
+            cstate.storeGamePolicyDNN(stateDNN, policyDNN);
+
+            for (auto it = std::make_pair(0, TTree::getChildIterator(subroot)); it.second.hasNext(); ++it.first) {
+                NodePtr child = it.second.next();
+                double pi = piAction[it.first].second;
+                std::cout << TProblem::act2str(child->action) << "; "
+                          << "Pi: " << pi << "; "
+                          << "W: " << child->W << "; "
+                          << "N: " << child->N << "; "
+                          << "Q: " << child->W/child->N
+                          << std::endl;
+            }
+
+            return action;
         }
-#endif
-
-        std::vector<float> stateDNN;
-        std::vector<float> policyDNN;
-        cstate.getGameStateDNN(stateDNN, idxAi);
-        cstate.getPolicyTrainDNN(policyDNN, idxAi, piAction);
-        cstate.storeGamePolicyDNN(stateDNN, policyDNN);
-
-        return action;
     }
 
     template <typename T>
