@@ -16,6 +16,10 @@ add_executable("Chess" src/mcts.cpp
                        src/main_chess.cpp)
 target_link_libraries("Chess" PUBLIC zmq.so)
 
+add_executable("Connect4" src/mcts.cpp
+                          src/main_connect4.cpp)
+target_link_libraries("Connect4" PUBLIC zmq.so)
+
 if (CUDA_FOUND)
     message (STATUS "Found CUDA${CUDA_VERSION_STRING}")
     #set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} "-G" ) # debug

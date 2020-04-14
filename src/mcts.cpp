@@ -2,10 +2,12 @@
 
 class Chess;
 class Hearts;
+class Connect4;
 class TSP_Edge;
 class TSP_Vertex;
 template class RolloutCUDA<Chess>;
 template class RolloutCUDA<Hearts>;
+template class RolloutCUDA<Connect4>;
 template class RolloutCUDA<TSP_Edge>;
 template class RolloutCUDA<TSP_Vertex>;
 
