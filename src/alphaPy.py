@@ -84,8 +84,9 @@ def debug_state(state, policy):
 
 
 class DNNStatePolicyHandler(threading.Thread):
-    def __init__(self, zmq_context, datafilepath_hdf, port="5557"):
+    def __init__(self, zmq_context, datafilepath_hdf, dims, port="5557"):
         threading.Thread.__init__(self)
+        self.dims = dims
         self.socket = zmq_context.socket(zmq.REP)
         self.socket.bind("tcp://*:{0}".format(port))
 
@@ -95,14 +96,14 @@ class DNNStatePolicyHandler(threading.Thread):
         if not h5py.is_hdf5(datafilepath_hdf):
             datafile = h5py.File(datafilepath_hdf, "w")
             datafile.create_dataset("state", dtype=np.float32,
-                                    shape=(0, 119, 8, 8),
-                                    maxshape=(None, 119, 8, 8),
-                                    chunks=(42, 119, 8, 8),
+                                    shape=(0, dims[0], dims[1], dims[2]),
+                                    maxshape=(None, dims[0], dims[1], dims[2]),
+                                    chunks=(42, dims[0], dims[1], dims[2]),
                                     compression="gzip", compression_opts=1)
             datafile.create_dataset("policy", dtype=np.float32,
-                                    shape=(0, 8, 8),
-                                    maxshape=(None, 8, 8),
-                                    chunks=(42 * 119, 8, 8),
+                                    shape=(0, dims[1], dims[2]),
+                                    maxshape=(None, dims[1], dims[2]),
+                                    chunks=(42 * dims[0], dims[1], dims[2]),
                                     compression="gzip", compression_opts=1)
             datafile.create_dataset("value", dtype=np.float32,
                                     shape=(0, 1),
@@ -172,13 +173,13 @@ class DNNStatePolicyHandler(threading.Thread):
                 #  receive state
                 message = self.socket.recv()
                 state = np.frombuffer(message, dtype=np.float32)
-                state.shape = (119, 8, 8)
+                state.shape = (self.dims[0], self.dims[1], self.dims[2])
                 send_ok(self.socket)
 
                 # receive policy
                 message = self.socket.recv()
                 policy = np.frombuffer(message, dtype=np.float32)
-                policy.shape = (8, 8)
+                policy.shape = (self.dims[1], self.dims[2])
                 send_ok(self.socket)
 
                 self.data_state.append(state)
@@ -189,11 +190,12 @@ class DNNStatePolicyHandler(threading.Thread):
 
 
 class DNNPredict(threading.Thread):
-    def __init__(self, zmq_context, port="5555"):
+    def __init__(self, zmq_context, dims, port="5555"):
         threading.Thread.__init__(self)
+        self.dims = dims
         self.socket = zmq_context.socket(zmq.REP)
         self.socket.bind("tcp://*:{0}".format(port))
-        self.model = ResidualCNN((119, 8, 8), (8, 8))
+        self.model = ResidualCNN((self.dims[0], self.dims[1], self.dims[2]), (self.dims[1], self.dims[2]))
         self.port = port
 
     def save_weight(self, path):
@@ -208,15 +210,15 @@ class DNNPredict(threading.Thread):
                 # get state
                 message = self.socket.recv()
                 state = np.frombuffer(message, dtype=np.float32)
-                state.shape = (1, 119, 8, 8)
+                state.shape = (1, self.dims[0], self.dims[1], self.dims[2])
 
                 # predict
                 value, policy = self.model.model.predict(state)
 
-                #  send prediction
-                data = np.empty((1, 65), dtype=np.float32)
-                data[0, :64] = policy
-                data[0, 64] = value
+                # send prediction
+                data = np.empty((1, self.dims[1]*self.dims[2]+1), dtype=np.float32)
+                data[0, :self.dims[1]*self.dims[2]] = policy
+                data[0, self.dims[1]*self.dims[2]] = value
                 data = np.array(data).tobytes()
                 self.socket.send(data)
 
@@ -469,6 +471,8 @@ def evaluate(args, best_model, curr_model):
 
 
 if __name__ == '__main__':
+    chess_dims = (119, 8, 8)
+    connect4_dims = (9, 6, 7)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
     parser = ArgumentParser()
     parser.add_argument("--human_play", action='store_true', help="Start server for human play")
@@ -489,9 +493,9 @@ if __name__ == '__main__':
         tf.config.experimental.set_memory_growth(gpu, True)
 
     context = zmq.Context(1)
-    best_model = DNNPredict(context, port="5555")
-    curr_model = DNNPredict(context, port="5556")
-    database = DNNStatePolicyHandler(context, args.path_to_database, port="5557")
+    best_model = DNNPredict(context, connect4_dims, port="5555")
+    curr_model = DNNPredict(context, connect4_dims, port="5556")
+    database = DNNStatePolicyHandler(context, args.path_to_database, connect4_dims, port="5557")
 
     if not os.path.isdir("/home/adamp/Documents/Codes/Hearts/models/best_0"):
         best_model.save_weight("/home/adamp/Documents/Codes/Hearts/models/best_0/weights")
