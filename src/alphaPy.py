@@ -482,9 +482,11 @@ if __name__ == '__main__':
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
 
-    log.info("TensorFlow V: {0}, CUDA: {1}, GPU: {2}".format(tf.__version__,
-                                                             tf.test.is_built_with_cuda(),
-                                                             tf.config.list_physical_devices('GPU')))
+    log.info("TensorFlow V: {0}, CUDA: {1}".format(tf.__version__, tf.test.is_built_with_cuda()))
+
+    for gpu in tf.config.list_physical_devices('GPU'):
+        log.info("GPU: {0}".format(gpu))
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     context = zmq.Context(1)
     best_model = DNNPredict(context, port="5555")
