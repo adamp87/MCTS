@@ -17,9 +17,19 @@ from tensorflow.keras import regularizers
 
 import matplotlib.pyplot as plt
 
-logging.basicConfig(format='%(asctime)s --%(levelname)s-- %(message)s')
-log = logging.getLogger("ROOT")
-log.setLevel(logging.INFO)
+log = logging.getLogger('')
+log.setLevel(logging.DEBUG)
+log_formatter = logging.Formatter('%(asctime)s --%(levelname)s-- %(message)s')
+# set up logging to file
+log_file = logging.FileHandler('/home/adamp/Documents/Codes/Hearts/data/chess_1.log')
+log_file.setFormatter(log_formatter)
+log_file.setLevel(logging.DEBUG)
+log.addHandler(log_file)
+# define a Handler which writes INFO messages or higher to console
+log_console = logging.StreamHandler()
+log_console.setFormatter(log_formatter)
+log_console.setLevel(logging.INFO)
+log.addHandler(log_console)
 
 
 def plot_state(state, policy):
