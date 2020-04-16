@@ -37,11 +37,23 @@ public:
 
 private:
     enum Figure { White=0, Black=1, Unset=2 };
+    struct Board {
+        Figure board[6*7];
+
+        Figure& operator[](int i) {
+            return board[i];
+        }
+
+        const Figure& operator[](int i) const {
+            return board[i];
+        }
+    };
+
 
     int time;
+    Board board;
     bool finished[2];
-    Figure board[6*7];
-    std::vector<Connect4> history;
+    std::vector<Board> history;
 
     std::string ports[2]; //!< ports for zeromq socket connections: white, black
     zmq::context_t& zmq_context; //!< zeromq context for socket connections
@@ -122,7 +134,7 @@ public:
         };
 
         int emptyCount = 0;
-        history.push_back(*this);
+        history.push_back(board);
         board[getXY(act.y, act.x)] = Figure(idxAi);
 
         for (int y = 0; y < 6; ++y) {
@@ -169,7 +181,7 @@ public:
 
         int t = 0;
         int idxOp = (idxMe + 1) % 2;
-        const Connect4* game = this;
+        const Board* game = &board;
         while (t != T && time-t>=0) {
             for (int y = 0; y < 6; ++y) {
                 for (int x = 0; x < 7; ++x) {
