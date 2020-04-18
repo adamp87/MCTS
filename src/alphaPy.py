@@ -472,23 +472,26 @@ def evaluate(args, best_model, curr_model):
 if __name__ == '__main__':
     chess_dims = (119, 8, 8)
     connect4_dims = (9, 6, 7)
+    project_dir = os.path.abspath(__file__).split(os.path.sep)[:-2]
+    if project_dir[0] == '':
+        project_dir[0] = '/'
+    project_dir = os.path.join(*project_dir)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
+    add_file_logger(os.path.join(project_dir, 'data', 'connect4.log'))
+
     parser = ArgumentParser()
     parser.add_argument("--human_play", action='store_true', help="Start server for human play")
     parser.add_argument("--iteration", type=int, default=0, help="Current iteration number to resume from")
     parser.add_argument("--total_iterations", type=int, default=100, help="Total number of iterations to run")
     parser.add_argument("--self_plays", type=int, default=120, help="Number of self play games to execute")
     parser.add_argument("--eval_plays", type=int, default=100, help="Number of evaluation play games to execute")
-    parser.add_argument("--path_to_exe", type=str, default="/home/adamp/Documents/Codes/Hearts/build/release/Chess", help="Path to CPP MCTS exe")
-    parser.add_argument("--path_to_database", type=str, default="/home/adamp/Documents/Codes/Hearts/data/chess.hdf", help="Path to HDF database")
+    parser.add_argument("--path_to_exe", type=str, default=os.path.join(project_dir, 'build', 'release', 'Connect4'), help="Path to CPP MCTS exe")
+    parser.add_argument("--path_to_database", type=str, default=os.path.join(project_dir, 'data', 'connect4.hdf'), help="Path to HDF database")
     parser.add_argument("--train_epochs", type=int, default=300, help="Number of epochs for training")
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
 
-    add_file_logger('/home/adamp/Documents/Codes/Hearts/data/connect4.log')
-
     log.info("TensorFlow V: {0}, CUDA: {1}".format(tf.__version__, tf.test.is_built_with_cuda()))
-
     for gpu in tf.config.list_physical_devices('GPU'):
         log.info("GPU: {0}".format(gpu))
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -498,15 +501,15 @@ if __name__ == '__main__':
     curr_model = DNNPredict(context, connect4_dims, port="5556")
     database = DNNStatePolicyHandler(context, args.path_to_database, connect4_dims, port="5557")
 
-    if not os.path.isdir("/home/adamp/Documents/Codes/Hearts/models/best_0"):
-        best_model.save_weight("/home/adamp/Documents/Codes/Hearts/models/best_0/weights")
+    if not os.path.isdir(os.path.join(project_dir, 'models', 'best_0')):
+        best_model.save_weight(os.path.join(project_dir, 'models', 'best_0', 'weights'))
         best_model.model.model.summary()
         log.info("Created new weights")
-    best_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(args.iteration))
-    curr_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(args.iteration))
+    best_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
+    curr_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
 
     # Test Code
-    # curr_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/save_1/weights")
+    # curr_model.load_weight(os.path.join(project_dir, 'models', 'save_1', 'weights'))
     # value, policy = curr_model.model.model.predict(np.array(database.datafile["state"]), batch_size=512)
     # print(np.unique(value, return_counts=True))
 
@@ -531,11 +534,11 @@ if __name__ == '__main__':
             log.info("Starting iteration: {0}".format(iteration_idx))
             self_play(args, best_model, curr_model, database)
             retrain(args, curr_model.model.model, database)
-            curr_model.save_weight("/home/adamp/Documents/Codes/Hearts/models/save_{0}/weights".format(iteration_idx))
+            curr_model.save_weight(os.path.join(project_dir, 'models', 'save_{0}'.format(args.iteration), 'weights'))
             if evaluate(args, best_model, curr_model):
                 log.info("New best model have been found in iteration: {0}".format(iteration_idx))
-                curr_model.save_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(iteration_idx))
-                best_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(iteration_idx))
+                curr_model.save_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
+                best_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
     except KeyboardInterrupt:
         context.term()
         database.join()
