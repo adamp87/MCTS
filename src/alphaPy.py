@@ -235,15 +235,15 @@ class ResidualCNN:
     def __init__(self, input_dim, output_dim):
 
         self.hidden_layers = []
-        for i in range(6):  # AlphaZero: 40
-            self.hidden_layers.append({'filters': 64, 'kernel_size': (3, 3)})  # AlphaZero: 256
+        for i in range(20):  # AlphaZero: 40
+            self.hidden_layers.append({'filters': 128, 'kernel_size': (3, 3)})  # AlphaZero: 256
         self.num_layers = len(self.hidden_layers)
 
         self.input_dim = input_dim
         self.output_dim = output_dim[0]*output_dim[1]  # flattened
         self.reg_const = 0.001
         self.learning_rate = 0.05
-        self.value_dense_node_count = 64  # AlphaZero: 256
+        self.value_dense_node_count = 32  # AlphaZero: 256
 
         self.model = self._build_model()
 
@@ -429,7 +429,7 @@ def retrain(args, model, database):
         policy.shape = (policy.shape[0], policy.shape[1] * policy.shape[2])
         targets = {'value_head': value, 'policy_head': policy}
 
-        fit = model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=128)
+        fit = model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=64)  # 32
         log.debug("Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
                                                               fit.history['value_head_loss'],
                                                               fit.history['policy_head_loss']))
