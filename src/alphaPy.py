@@ -12,11 +12,11 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, LeakyReLU, add
+from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, add
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 log = logging.getLogger('')
 log.setLevel(logging.DEBUG)
@@ -234,27 +234,22 @@ class DNNPredict(threading.Thread):
 class ResidualCNN:
     def __init__(self, input_dim, output_dim):
 
-        self.hidden_layers = [
-            {'filters': 75, 'kernel_size': (4, 4)}
-            , {'filters': 75, 'kernel_size': (4, 4)}
-            , {'filters': 75, 'kernel_size': (4, 4)}
-            , {'filters': 75, 'kernel_size': (4, 4)}
-            , {'filters': 75, 'kernel_size': (4, 4)}
-            , {'filters': 75, 'kernel_size': (4, 4)}
-        ]
+        self.hidden_layers = []
+        for i in range(6):  # AlphaZero: 40
+            self.hidden_layers.append({'filters': 64, 'kernel_size': (3, 3)})  # AlphaZero: 256
         self.num_layers = len(self.hidden_layers)
 
         self.input_dim = input_dim
-        self.output_dim = output_dim[0]*output_dim[1]  # TODO
-        self.reg_const = 0.0001
-        self.learning_rate = 0.1
-        self.value_dense_node_count = 20
+        self.output_dim = output_dim[0]*output_dim[1]  # flattened
+        self.reg_const = 0.001
+        self.learning_rate = 0.05
+        self.value_dense_node_count = 64  # AlphaZero: 256
 
         self.model = self._build_model()
 
     def residual_layer(self, input_block, filters, kernel_size):
 
-        x = self.conv_layer(input_block, filters, kernel_size)
+        x = self.conv_layer(input_block, filters, kernel_size, False)
 
         x = Conv2D(
             filters=filters
@@ -270,24 +265,24 @@ class ResidualCNN:
 
         x = add([input_block, x])
 
-        x = LeakyReLU()(x)
+        x = ReLU()(x)
 
         return (x)
 
-    def conv_layer(self, x, filters, kernel_size):
+    def conv_layer(self, x, filters, kernel_size, bias=True):
 
         x = Conv2D(
             filters=filters
             , kernel_size=kernel_size
             , data_format="channels_first"
             , padding='same'
-            , use_bias=False
+            , use_bias=bias
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
         x = BatchNormalization(axis=1)(x)
-        x = LeakyReLU()(x)
+        x = ReLU()(x)
 
         return (x)
 
@@ -298,28 +293,28 @@ class ResidualCNN:
             , kernel_size=(1, 1)
             , data_format="channels_first"
             , padding='same'
-            , use_bias=False
+            , use_bias=True
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
         x = BatchNormalization(axis=1)(x)
-        x = LeakyReLU()(x)
+        x = ReLU()(x)
 
         x = Flatten()(x)
 
         x = Dense(
             self.value_dense_node_count
-            , use_bias=False
+            , use_bias=True
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
-        x = LeakyReLU()(x)
+        x = ReLU()(x)
 
         x = Dense(
             1
-            , use_bias=False
+            , use_bias=True
             , activation='tanh'
             , kernel_regularizer=regularizers.l2(self.reg_const)
             , name='value_head'
@@ -334,19 +329,19 @@ class ResidualCNN:
             , kernel_size=(1, 1)
             , data_format="channels_first"
             , padding='same'
-            , use_bias=False
+            , use_bias=True
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
         x = BatchNormalization(axis=1)(x)
-        x = LeakyReLU()(x)
+        x = ReLU()(x)
 
         x = Flatten()(x)
 
         x = Dense(
             self.output_dim
-            , use_bias=False
+            , use_bias=True
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
             , name='policy_head'
@@ -434,7 +429,7 @@ def retrain(args, model, database):
         policy.shape = (policy.shape[0], policy.shape[1] * policy.shape[2])
         targets = {'value_head': value, 'policy_head': policy}
 
-        fit = model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=32)
+        fit = model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=128)
         log.debug("Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
                                                               fit.history['value_head_loss'],
                                                               fit.history['policy_head_loss']))
@@ -509,6 +504,11 @@ if __name__ == '__main__':
         log.info("Created new weights")
     best_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(args.iteration))
     curr_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/best_{0}/weights".format(args.iteration))
+
+    # Test Code
+    # curr_model.load_weight("/home/adamp/Documents/Codes/Hearts/models/save_1/weights")
+    # value, policy = curr_model.model.model.predict(np.array(database.datafile["state"]), batch_size=512)
+    # print(np.unique(value, return_counts=True))
 
     database.start()
     best_model.start()
