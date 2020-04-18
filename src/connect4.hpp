@@ -236,6 +236,15 @@ public:
     //! Interface, Compute W and P values for MCTS
     //! * \param idxMe ID of player who executes function
     void computeMCTS_WP(int idxMe, ActType* actions, ActCounterType nActions, double* P, double& W) const {
+        if (ports[idxMe] == "0") {
+            // compute W only on end results, no dnn
+            W = computeMCTS_W(idxMe);
+            for (ActCounterType i = 0; i < nActions; ++i) {
+                P[i] = 1.0;
+            }
+            return;
+        }
+
         std::vector<float> state_dnn;
         getGameStateDNN(state_dnn, idxMe);
 
@@ -270,8 +279,13 @@ public:
         }
     }
 
-    double computeMCTS_W(int) const {
-        throw std::runtime_error("Unimplemented");
+    double computeMCTS_W(int idxAi) const {
+        int idxOp = (idxAi + 1) % 2;
+        if (finished[idxAi])
+            return 1.0;
+        if (finished[idxOp])
+            return -1.0;
+        return 0.0;
     }
 
     std::string getEndOfGameString() const {
