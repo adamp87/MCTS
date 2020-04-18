@@ -3,6 +3,7 @@ import logging
 import threading
 import subprocess
 from argparse import ArgumentParser
+from logging.handlers import RotatingFileHandler
 
 import zmq
 import h5py
@@ -20,16 +21,19 @@ import matplotlib.pyplot as plt
 log = logging.getLogger('')
 log.setLevel(logging.DEBUG)
 log_formatter = logging.Formatter('%(asctime)s --%(levelname)s-- %(message)s')
-# set up logging to file
-log_file = logging.FileHandler('/home/adamp/Documents/Codes/Hearts/data/chess_1.log')
-log_file.setFormatter(log_formatter)
-log_file.setLevel(logging.DEBUG)
-log.addHandler(log_file)
 # define a Handler which writes INFO messages or higher to console
 log_console = logging.StreamHandler()
 log_console.setFormatter(log_formatter)
 log_console.setLevel(logging.INFO)
 log.addHandler(log_console)
+
+
+def add_file_logger(log_path):
+    # set up logging to file
+    log_file = logging.handlers.RotatingFileHandler(log_path, 'a', maxBytes=1024*1024, backupCount=1024*1024)
+    log_file.setFormatter(log_formatter)
+    log_file.setLevel(logging.DEBUG)
+    log.addHandler(log_file)
 
 
 def plot_state(state, policy):
@@ -485,6 +489,8 @@ if __name__ == '__main__':
     parser.add_argument("--train_epochs", type=int, default=300, help="Number of epochs for training")
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
+
+    add_file_logger('/home/adamp/Documents/Codes/Hearts/data/connect4.log')
 
     log.info("TensorFlow V: {0}, CUDA: {1}".format(tf.__version__, tf.test.is_built_with_cuda()))
 
