@@ -124,7 +124,7 @@ public:
         auto opPos = [&] (int val) -> int { return  val; };
         auto opNeg = [&] (int val) -> int { return -val; };
         auto scanLine = [&] (int x, int y, std::function<int (int)> opX, std::function<int (int)> opY) -> bool {
-            int count = 0;
+            int count = 1;
             for(int n=1; n < 7; ++n) {
                 if (!isOwnStone(x,y,opX(n),opY(n)))
                     break;
@@ -141,23 +141,16 @@ public:
             for (int x = 0; x < 7; ++x) {
                 if (board[getXY(y, x)] == Figure::Unset)
                     ++emptyCount;
+                if (board[getXY(y, x)] != idxAi)
+                    continue;
 
-                //TODO: optimize?
                 if (scanLine(x,y,opNul,opPos))
-                    finished[idxAi] = true;
-                if (scanLine(x,y,opNul,opNeg))
                     finished[idxAi] = true;
                 if (scanLine(x,y,opPos,opNul))
                     finished[idxAi] = true;
-                if (scanLine(x,y,opNeg,opNul))
-                    finished[idxAi] = true;
                 if (scanLine(x,y,opPos,opPos))
                     finished[idxAi] = true;
-                if (scanLine(x,y,opPos,opNeg))
-                    finished[idxAi] = true;
                 if (scanLine(x,y,opNeg,opPos))
-                    finished[idxAi] = true;
-                if (scanLine(x,y,opNeg,opNeg))
                     finished[idxAi] = true;
             }
         }
