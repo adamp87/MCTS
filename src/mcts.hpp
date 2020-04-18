@@ -92,10 +92,9 @@ private:
 
             // node fully expanded
             // set node to best leaf
-            // compute subRootVisit for each iteration, because of multithread
             NodePtr best = node; // init
             double best_val = -std::numeric_limits<double>::max();
-            double subRootVisitSqrt = sqrt(static_cast<ActCounterType>(subRoot->N));
+            double subRootVisitSqrt = sqrt(std::max(static_cast<ActCounterType>(node->N), (ActCounterType)1));
             for (auto it = std::make_pair(0, TTree::getChildIterator(node)); it.second.hasNext(); ++it.first) {
                 NodePtr child = it.second.next();
                 const int i = it.first % dirichlet.size(); // index not goes outofbounds for child notes
