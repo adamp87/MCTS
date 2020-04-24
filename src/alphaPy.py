@@ -15,6 +15,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, add
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
+from tensorflow.python.compiler.tensorrt import trt_convert as trt
 
 #import matplotlib.pyplot as plt
 
@@ -201,12 +202,33 @@ class DNNPredict(threading.Thread):
         self.socket.bind("tcp://*:{0}".format(port))
         self.model = ResidualCNN((self.dims[0], self.dims[1], self.dims[2]), (self.dims[1], self.dims[2]))
         self.port = port
+        self.frozen_predict = None
 
-    def save_weight(self, path):
-        self.model.model.save_weights(path)
+    def save(self, path):
+        self.model.model.save_weights(os.path.join(path, 'weights', 'weights'))
+        tf.saved_model.save(self.model.model, os.path.join(path, 'saved'))
+        DNNPredict._convert(os.path.join(path, 'saved'), os.path.join(path, 'frozen'))
+        self.load(path)
 
-    def load_weight(self, path):
-        self.model.model.load_weights(path)
+    def load(self, path):
+        self.model.model.load_weights(os.path.join(path, 'weights', 'weights'))
+        saved_model_loaded = tf.saved_model.load(os.path.join(path, 'frozen'), tags=[trt.tag_constants.SERVING])
+        graph_func = saved_model_loaded.signatures[trt.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+        self.frozen_predict = trt.convert_to_constants.convert_variables_to_constants_v2(graph_func)
+
+    @staticmethod
+    def _convert(path_saved_model, path_frozen_model):
+        conversion_params = trt.DEFAULT_TRT_CONVERSION_PARAMS
+        conversion_params = conversion_params._replace(
+            max_workspace_size_bytes=(1 << 32))
+        conversion_params = conversion_params._replace(precision_mode="FP16")
+        conversion_params = conversion_params._replace(
+            maximum_cached_engines=100)
+
+        converter = trt.TrtGraphConverterV2(input_saved_model_dir=path_saved_model,
+                                            conversion_params=conversion_params)
+        converter.convert()
+        converter.save(path_frozen_model)
 
     def run(self):
         while True:
@@ -217,7 +239,11 @@ class DNNPredict(threading.Thread):
                 state.shape = (1, self.dims[0], self.dims[1], self.dims[2])
 
                 # predict
-                value, policy = self.model.model.predict(state)
+                # value, policy = self.model.model.predict(state)
+                state = tf.convert_to_tensor(state, dtype=tf.float32)
+                prediction = self.frozen_predict(state)
+                value = prediction[1].numpy()
+                policy = prediction[0].numpy()
 
                 # send prediction
                 data = np.empty((1, self.dims[1]*self.dims[2]+1), dtype=np.float32)
@@ -502,11 +528,11 @@ if __name__ == '__main__':
     database = DNNStatePolicyHandler(context, args.path_to_database, connect4_dims, port="5557")
 
     if not os.path.isdir(os.path.join(project_dir, 'models', 'best_0')):
-        best_model.save_weight(os.path.join(project_dir, 'models', 'best_0', 'weights'))
+        best_model.save(os.path.join(project_dir, 'models', 'best_0'))
         best_model.model.model.summary()
         log.info("Created new weights")
-    best_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
-    curr_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
+    best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
+    curr_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
 
     # Test Code
     # curr_model.load_weight(os.path.join(project_dir, 'models', 'save_1', 'weights'))
@@ -534,11 +560,11 @@ if __name__ == '__main__':
             log.info("Starting iteration: {0}".format(iteration_idx))
             self_play(args, best_model, curr_model, database)
             retrain(args, curr_model.model.model, database)
-            curr_model.save_weight(os.path.join(project_dir, 'models', 'save_{0}'.format(args.iteration), 'weights'))
+            curr_model.save(os.path.join(project_dir, 'models', 'save_{0}'.format(args.iteration)))
             if evaluate(args, best_model, curr_model):
                 log.info("New best model have been found in iteration: {0}".format(iteration_idx))
-                curr_model.save_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
-                best_model.load_weight(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration), 'weights'))
+                curr_model.save(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
+                best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
     except KeyboardInterrupt:
         context.term()
         database.join()
