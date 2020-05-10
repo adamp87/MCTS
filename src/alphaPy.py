@@ -405,6 +405,7 @@ def execute_game(cmd_args):
             if not output:
                 break
             output = output.replace('\n', '')  # remove newline
+            output = output.replace('\r', '')  # remove newline
             last_line = output
             log.debug(output)
 
@@ -500,6 +501,8 @@ if __name__ == '__main__':
     project_dir = os.path.abspath(__file__).split(os.path.sep)[:-2]
     if project_dir[0] == '':
         project_dir[0] = '/'
+    if project_dir[0][-1] == ':':
+        project_dir[0] = os.path.join(project_dir[0], os.sep)
     project_dir = os.path.join(*project_dir)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
     add_file_logger(os.path.join(project_dir, 'data', 'connect4.log'))

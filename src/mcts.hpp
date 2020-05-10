@@ -6,8 +6,9 @@
 #include <limits>
 #include <random>
 #include <numeric>
-#include <algorithm>
 #include <iostream>
+#include <algorithm>
+#include <functional>
 
 #include "mcts.cuh"
 #include "mcts_debug.hpp"
@@ -198,7 +199,7 @@ private:
         }
 
         // select
-        std::discrete_distribution<ActCounterType> distribution(pi.begin(), pi.end());
+        std::discrete_distribution<int> distribution(pi.begin(), pi.end());
         int select = distribution(generator);
         return childs[select]->action;
     }

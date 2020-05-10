@@ -5,6 +5,7 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
+#include <functional>
 
 #include <zmq.hpp>
 
@@ -485,7 +486,7 @@ public:
 
             int count = repetitions(*figs, t);
             std::fill(data.data()+repetition_start+ t*8*8,
-                      data.data()+repetition_start+ t*8*8 + std::min(count,2)*8*8,
+                      data.data()+repetition_start+ t*8*8 + std::min<int>(count,2)*8*8,
                       1.0f);
 
             ++t;
