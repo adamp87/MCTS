@@ -12,7 +12,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, add
+from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, LeakyReLU, add
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import regularizers
 from tensorflow.python.compiler.tensorrt import trt_convert as trt
@@ -267,15 +267,14 @@ class ResidualCNN:
 
         self.input_dim = input_dim
         self.output_dim = output_dim[0]*output_dim[1]  # flattened
-        self.reg_const = 0.001
-        self.learning_rate = 0.05
-        self.value_dense_node_count = 32  # AlphaZero: 256
+        self.reg_const = 0.0001
+        self.learning_rate = 0.1
 
         self.model = self._build_model()
 
     def residual_layer(self, input_block, filters, kernel_size):
 
-        x = self.conv_layer(input_block, filters, kernel_size, False)
+        x = self.conv_layer(input_block, filters, kernel_size)
 
         x = Conv2D(
             filters=filters
@@ -295,14 +294,14 @@ class ResidualCNN:
 
         return (x)
 
-    def conv_layer(self, x, filters, kernel_size, bias=True):
+    def conv_layer(self, x, filters, kernel_size):
 
         x = Conv2D(
             filters=filters
             , kernel_size=kernel_size
             , data_format="channels_first"
             , padding='same'
-            , use_bias=bias
+            , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
@@ -319,30 +318,30 @@ class ResidualCNN:
             , kernel_size=(1, 1)
             , data_format="channels_first"
             , padding='same'
-            , use_bias=True
+            , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
         x = BatchNormalization(axis=1)(x)
-        x = ReLU()(x)
+        x = LeakyReLU()(x)
 
         x = Flatten()(x)
 
         x = Dense(
-            self.value_dense_node_count
-            , use_bias=True
+            256
+            , use_bias=False
             , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
+            , kernel_regularizer=regularizers.l2(0.1)
         )(x)
 
-        x = ReLU()(x)
+        x = LeakyReLU()(x)
 
         x = Dense(
             1
-            , use_bias=True
+            , use_bias=False
             , activation='tanh'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
+            , kernel_regularizer=regularizers.l2(0.01)
             , name='value_head'
         )(x)
 
@@ -355,7 +354,7 @@ class ResidualCNN:
             , kernel_size=(1, 1)
             , data_format="channels_first"
             , padding='same'
-            , use_bias=True
+            , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
@@ -367,9 +366,9 @@ class ResidualCNN:
 
         x = Dense(
             self.output_dim
-            , use_bias=True
+            , use_bias=False
             , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
+            , kernel_regularizer=regularizers.l2(0.0001)
             , name='policy_head'
         )(x)
 
