@@ -559,13 +559,15 @@ if __name__ == '__main__':
             log.info("Starting iteration: {0}".format(iteration_idx))
             self_play(args, best_model, curr_model, database)
             retrain(args, curr_model.model.model, database)
-            curr_model.save(os.path.join(project_dir, 'models', 'save_{0}'.format(args.iteration)))
+            curr_model.save(os.path.join(project_dir, 'models', 'save_{0}'.format(iteration_idx)))
             if evaluate(args, best_model, curr_model):
                 log.info("New best model have been found in iteration: {0}".format(iteration_idx))
-                curr_model.save(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
-                best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
+                curr_model.save(os.path.join(project_dir, 'models', 'best_{0}'.format(iteration_idx)))
+                best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(iteration_idx)))
     except KeyboardInterrupt:
-        context.term()
-        database.join()
-        best_model.join()
-        curr_model.join()
+        pass
+    context.term()
+    database.join()
+    best_model.join()
+    curr_model.join()
+
