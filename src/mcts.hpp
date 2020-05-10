@@ -233,7 +233,7 @@ public:
             backprop(policyNodes, W);
 
             // only one choice, dont think
-            if (TTree::getChildCount(subroot) == 1) {
+            if (TTree::getChildCount(subroot) == 1 && isDeterministic) {
                 NodePtr child = TTree::getChildIterator(subroot).next();
                 return child->action;
             }
