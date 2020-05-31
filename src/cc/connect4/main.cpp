@@ -7,10 +7,7 @@
 #include <iostream>
 
 #include "mcts.hpp"
-#include "mcts.cuh"
-#include "mctree.hpp"
 #include "connect4.hpp"
-#include "mcts_debug.hpp"
 
 #ifdef __linux__
 #include <ctime>
@@ -33,11 +30,8 @@ typedef MCTreeDynamic<MCTSNodeBaseMT<Connect4::ActType> > TreeContainer;
 static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Connect4::ActType> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeStaticArray<Connect4::ActType, Connect4::MaxChildPerNode> TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBase<Connect4::ActType> > TreeContainer;
 #endif
-
-//typedef MCTS_Policy_Debug PolicyDebug;
-typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
 Connect4::ActType getCmdInput(const Connect4& state, int player) {
     bool valid = false;
@@ -63,7 +57,6 @@ Connect4::ActType getCmdInput(const Connect4& state, int player) {
 
 int main(int argc, char** argv) {
     int writeTree = 0;
-    int maxRolloutDepth = 0;
     std::string workDir = "";
     bool isDeterministic = true;
     std::string portWhite = "tcp://localhost:5555";
@@ -71,7 +64,6 @@ int main(int argc, char** argv) {
     auto timestamp = std::time(0);
     unsigned int seed = getSeed();
     unsigned int policyIter[2] = {1600, 1600};
-    unsigned int rolloutIter[2] = {0, 0};
 
     if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
         std::cout << "Paramaters:" << std::endl;
@@ -129,16 +121,7 @@ int main(int argc, char** argv) {
     zmq::context_t zmq_context(16);
     std::vector<Connect4::ActType> history;
     Connect4 state(zmq_context, portWhite, portBlack);
-    PolicyDebug policyDebug(writeTree, workDir, "connect4", timestamp);
-    std::array<MCTS<TreeContainer, Connect4, PolicyDebug>, 2> ai = {seed, seed};
-
-    // int cuda rollout
-    std::unique_ptr<RolloutCUDA<Connect4> > rolloutCuda(new RolloutCUDA<Connect4>(rolloutIter, seed));
-    if (rolloutCuda->hasGPU()) {
-        std::cout << "GPU Mode" << std::endl;
-    } else {
-        std::cout << "CPU Mode" << std::endl;
-    }
+    std::array<MCTS<TreeContainer, Connect4>, 2> ai = {seed, seed};
 
     // execute game
     for (int time = 0; !state.isFinished(); ++time) {
@@ -147,14 +130,10 @@ int main(int argc, char** argv) {
         Connect4::ActType act = (policyIter[player] == 0)  ?
                                 getCmdInput(state, player) :
                                 ai[player].execute(player,
-                                                   maxRolloutDepth,
                                                    isDeterministic,
                                                    state,
                                                    policyIter[player],
-                                                   rolloutIter[player],
-                                                   history,
-                                                   rolloutCuda.get(),
-                                                   policyDebug);
+                                                   history);
         auto t1 = std::chrono::high_resolution_clock::now();
         state.update(act);
         history.push_back(act);

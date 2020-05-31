@@ -8,10 +8,7 @@
 #include <iostream>
 
 #include "mcts.hpp"
-#include "mcts.cuh"
-#include "mctree.hpp"
 #include "chess.hpp"
-#include "mcts_debug.hpp"
 
 #ifdef __linux__
 #include <ctime>
@@ -34,11 +31,8 @@ typedef MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > TreeContainer;
 static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > >::value,
               "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
 #else
-typedef MCTreeStaticArray<Chess::ActType, Chess::MaxChildPerNode> TreeContainer;
+typedef MCTreeDynamic<MCTSNodeBase<Chess::ActType> > TreeContainer;
 #endif
-
-//typedef MCTS_Policy_Debug PolicyDebug;
-typedef MCTS_Policy_Debug_Dummy PolicyDebug;
 
 Chess::ActType getCmdInput(const Chess& state, int player) {
     bool valid = false;
@@ -94,7 +88,6 @@ Chess::ActType getCmdInput(const Chess& state, int player) {
 
 int main(int argc, char** argv) {
     int writeTree = 0;
-    int maxRolloutDepth = 0;
     std::string workDir = "";
     bool isDeterministic = true;
     std::string portWhite = "tcp://localhost:5555";
@@ -102,7 +95,6 @@ int main(int argc, char** argv) {
     auto timestamp = std::time(0);
     unsigned int seed = getSeed();
     unsigned int policyIter[2] = {1600, 1600};
-    unsigned int rolloutIter[2] = {0, 0};
 
     if (argc == 2 && (argv[1] == std::string("-h") || argv[1] == std::string("--help"))) {
         std::cout << "Paramaters:" << std::endl;
@@ -160,21 +152,12 @@ int main(int argc, char** argv) {
     zmq::context_t zmq_context(16);
     std::vector<Chess::ActType> history;
     Chess state(zmq_context, portWhite, portBlack);
-    PolicyDebug policyDebug(writeTree, workDir, "chess", timestamp);
-    std::array<MCTS<TreeContainer, Chess, PolicyDebug>, 2> ai = {seed, seed};
+    std::array<MCTS<TreeContainer, Chess>, 2> ai = {seed, seed};
     if (!state.test_actions()) {
         std::cout << "Error in logic" << std::endl;
         return -1;
     }
     state.setDebugBoard(0); // zero means no change
-
-    // int cuda rollout
-    std::unique_ptr<RolloutCUDA<Chess> > rolloutCuda(new RolloutCUDA<Chess>(rolloutIter, seed));
-    if (rolloutCuda->hasGPU()) {
-        std::cout << "GPU Mode" << std::endl;
-    } else {
-        std::cout << "CPU Mode" << std::endl;
-    }
 
     // execute game
     for (int time = 0; !state.isFinished(); ++time) {
@@ -183,14 +166,10 @@ int main(int argc, char** argv) {
         Chess::ActType act =   (policyIter[player] == 0)  ?
                                getCmdInput(state, player) :
                                ai[player].execute(player,
-                                                  maxRolloutDepth,
                                                   isDeterministic,
                                                   state,
                                                   policyIter[player],
-                                                  rolloutIter[player],
-                                                  history,
-                                                  rolloutCuda.get(),
-                                                  policyDebug);
+                                                  history);
         auto t1 = std::chrono::high_resolution_clock::now();
         std::string actDesc = state.getActionDescription(act);
         state.update(act);
@@ -216,7 +195,7 @@ int main(int argc, char** argv) {
         filename << workDir << "chess_" << timestamp << "_player_" << p << ".csv";
 
         file.open(filename.str());
-        float maxIter = float(policyIter[p] * rolloutIter[p]);
+        float maxIter = float(policyIter[p]);
         ai[p].writeResults(state, p, maxIter, history, file);
         file.close();
 

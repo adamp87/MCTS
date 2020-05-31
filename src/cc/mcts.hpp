@@ -1,6 +1,8 @@
 #ifndef MCTS_HPP
 #define MCTS_HPP
 
+#include <mutex>
+#include <atomic>
 #include <vector>
 #include <memory>
 #include <limits>
@@ -10,8 +12,157 @@
 #include <algorithm>
 #include <functional>
 
-#include "mcts.cuh"
-#include "mcts_debug.hpp"
+//! Base class for all Tree::Node implementations
+template <typename T_Act>
+struct MCTSNodeBase {
+    typedef T_Act ActType;
+    typedef std::uint_fast32_t CountType;
+
+    //! Dummy LockGuard, helps to keep policy transparent
+    class LockGuard {
+    public:
+        LockGuard(MCTSNodeBase<T_Act>&) {}
+    };
+
+    CountType   N;      //!< state visit count
+    double      W;      //!< total value of state
+    double      P;      //!< prior probability to select action
+    T_Act       action; //!< action that takes to state, e.g. card played out
+
+    MCTSNodeBase(const T_Act& action)
+        : N(0), W(0.0), P(0.0), action(action)
+    { }
+};
+
+//! Base class for multithreaded MCTreeDynamic::Node
+template <typename T_Act>
+struct MCTSNodeBaseMT {
+    typedef T_Act ActType;
+    typedef std::uint_fast32_t CountType;
+
+    //! LockGuard inherited from std, constructor takes node
+    class LockGuard : public std::lock_guard<std::mutex> {
+    public:
+        LockGuard(MCTSNodeBaseMT<T_Act>& node)
+            : std::lock_guard<std::mutex>(node.lock)
+        {}
+    };
+
+    //! Workaround, until C20 standard enables atomic operations for double
+    class MyAtomicDouble {
+        std::atomic<double> value;
+
+    public:
+        MyAtomicDouble() : value(0) {}
+        operator double() const {
+            return value;
+        }
+        void operator+=(double& val) {
+            double prev = value;
+            double next = prev + val;
+            while (!value.compare_exchange_weak(prev, next)) {}
+        }
+    };
+
+    std::atomic<CountType>  N;      //!< state visit count
+    MyAtomicDouble          W;      //!< total value of state
+    double                  P;      //!< prior probability to select action
+    T_Act                   action; //!< action that takes to state, e.g. card played out
+    std::mutex              lock;   //!< mutex for thread-safe policy
+
+    MCTSNodeBaseMT(const T_Act& action)
+        : N(0), P(0.0), action(action)
+    { }
+};
+
+//! Data container, store nodes detached, store childs as pointers
+/*!
+ * \details For each node, memory is allocated dynamically.
+ *          The root is stored as a node.
+ *          The childs are stored as pointers.
+ *          Each node stores the pointers in a vector.
+ * \author adamp87
+*/
+template <typename T_NodeBase>
+class MCTreeDynamic {
+public:
+    typedef typename T_NodeBase::ActType ActType;
+
+    //! One node with childs, interface
+    class Node : public T_NodeBase {
+    private:
+        std::vector<std::unique_ptr<Node> > childs; //!< store childs as unique pointers
+
+        friend class ChildIterator;
+        friend class MCTreeDynamic;
+
+        Node(const ActType& action) : T_NodeBase(action) {}
+        Node(const Node&) = delete;
+    };
+
+    typedef Node* NodePtr; //!< pointer to a node, interface
+
+    //! Iterator to get childs of a node, interface
+    class ChildIterator {
+        size_t pos; //!< position in the child container
+        const NodePtr node; //!< get childs of this node
+
+        friend class MCTreeDynamic;
+
+        ChildIterator(NodePtr& node)
+            : pos(0), node(node) { }
+
+    public:
+        //! Returns true if not all childs have been visited, interface
+        bool hasNext() const {
+            return node->childs.size() != pos;
+        }
+
+        //! Return pointer to next child, interface
+        NodePtr next() {
+            return NodePtr(node->childs[pos++].get());
+        }
+    };
+
+private:
+    std::unique_ptr<Node> root; //!< root of the tree
+
+public:
+    //! Construct tree, interface
+    MCTreeDynamic() {
+        // artifical root, doesnt hold valid action
+        root.reset(new Node(ActType()));
+    }
+
+    //! Add a new node to parent, interface
+    NodePtr addNode(NodePtr& _parent, const ActType& act) const {
+        // init leaf node
+        std::unique_ptr<Node> child(new Node(act));
+
+        _parent->childs.push_back(std::move(child));
+        return _parent->childs.back().get();
+    }
+
+    //! Get pointer to the root, interface
+    NodePtr getRoot() const {
+        return root.get();
+    }
+
+    //! Return an iterator to get childs of node, interface
+    ChildIterator getChildIterator(NodePtr& node) const {
+        return ChildIterator(node);
+    }
+
+    //! Return the number of childs of node, interface
+    size_t getChildCount(NodePtr& node) const {
+        return node->childs.size();
+    }
+
+    //! Can be used for debug, interface for debug
+    size_t getNodeId(NodePtr& node) const {
+        return reinterpret_cast<size_t>(node);
+    }
+};
 
 //! Monte Carlo tree search to apply AI
 /*!
@@ -27,9 +178,8 @@
  *          This is not documented, but the MCTreeDynamic class is the easiest to understand the interface.
  * \author adamp87
 */
-template <class TTree, class TProblem, class TPolicyDebug>
+template <class TTree, class TProblem>
 class MCTS : public TTree {
-    friend TPolicyDebug;
     typedef typename TTree::Node Node;
     typedef typename TTree::NodePtr NodePtr;
     typedef typename Node::CountType CountType;
@@ -117,21 +267,6 @@ private:
         return node;
     }
 
-    //! Applies the rollout step of the Tree Search
-    //! \todo change rand() function to c++ style
-    bool rollout(TProblem& state, int idxAi, int maxRolloutDepth) const {
-        int depth = 0; //if max is zero, until finished
-        ActType actions[TProblem::MaxActions];
-        while (!state.isFinished()) {
-            if (++depth == maxRolloutDepth)
-                break;
-            ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
-            ActCounterType pick = static_cast<ActCounterType>(rand() % nActions);
-            state.update(actions[pick]);
-        }
-        return true;
-    }
-
     //! Applies the backprop step of the Tree Search
     void backprop(std::vector<NodePtr>& visited_nodes, double W) const {
         // backprop results to visited nodes
@@ -209,14 +344,10 @@ public:
 
     //! Execute a search on the current state for the ai, return the action
     ActType execute(int idxAi,
-                    int maxRolloutDepth,
                     bool isDeterministic,
                     const TProblem& cstate,
                     unsigned int policyIter,
-                    unsigned int rolloutIter,
-                    const std::vector<ActType>& history,
-                    RolloutCUDA<TProblem>* rollloutCuda,
-                    TPolicyDebug& policyDebug)
+                    const std::vector<ActType>& history)
     {
         // walk tree according to history
         NodePtr subroot = catchup(cstate, history);
@@ -228,7 +359,6 @@ public:
 
             // selection and expansion
             NodePtr node = policy(subroot, state, idxAi, policyNodes, W);
-            policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, 0, history.size());
 
             // backpropagation of policy node
             backprop(policyNodes, W);
@@ -248,30 +378,9 @@ public:
 
             // selection and expansion
             NodePtr node = policy(subroot, state, idxAi, policyNodes, W);
-            policyDebug.push(*this, cstate, policyNodes, subroot, idxAi, i, history.size());
 
             // backpropagation of policy node
             backprop(policyNodes, W);
-            if (rolloutIter == 0)
-                continue; // no random rollout
-
-            { // rollout and backprop
-                if (rollloutCuda->hasGPU() && rolloutIter != 1 &&
-                    rollloutCuda->cuRollout(idxAi, maxRolloutDepth, state, rolloutIter, W))
-                { // rollout on gpu (if has gpu and requested, execute if gpu is free)
-                    // NOTE: backprop one-by-one to decrease inconsistent increment in multithreading
-                    for (unsigned int j = 0; j < rolloutIter; ++j)
-                        backprop(policyNodes, W);
-                } else { // rollout on cpu (fallback)
-                    for (unsigned int j = 0; j < rolloutIter; ++j) {
-                        TProblem rstate(state); // NOTE: copy of state is mandatory
-                        rollout(rstate, idxAi, maxRolloutDepth);
-                        // backprop
-                        W = rstate.computeMCTS_W(idxAi);
-                        backprop(policyNodes, W);
-                    }
-                }
-            }
         }
 
         if (isDeterministic) {

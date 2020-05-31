@@ -9,10 +9,10 @@
 #include <iostream>
 
 #include "mcts.cuh"
-#include "hearts.hpp"
+#include "hearts/hearts.hpp"
 
 // NOTE: this is a dirty solution, compile flow.cpp for cuda here
-#include "flownetwork.cpp"
+#include "hearts/flownetwork.cpp"
 
 class Hearts;
 template class RolloutCUDA<Hearts>;
