@@ -25,13 +25,9 @@ int getSeed() {
 #endif
 
 #ifdef _OPENMP
-typedef MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > TreeContainer;
-
-// keep static_assert, might be usefull later
-static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Chess::ActType> > >::value,
-              "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
+typedef MCTS<Chess, MCTSNodeBaseMT<Chess::ActType> > MCTSDef;
 #else
-typedef MCTreeDynamic<MCTSNodeBase<Chess::ActType> > TreeContainer;
+typedef MCTS<Chess, MCTSNodeBase<Chess::ActType> > MCTSDef;
 #endif
 
 Chess::ActType getCmdInput(const Chess& state, int player) {
@@ -152,7 +148,7 @@ int main(int argc, char** argv) {
     zmq::context_t zmq_context(16);
     std::vector<Chess::ActType> history;
     Chess state(zmq_context, portWhite, portBlack);
-    std::array<MCTS<TreeContainer, Chess>, 2> ai = {seed, seed};
+    std::array<MCTSDef, 2> ai = {seed, seed};
     if (!state.test_actions()) {
         std::cout << "Error in logic" << std::endl;
         return -1;

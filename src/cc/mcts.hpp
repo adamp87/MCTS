@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <functional>
 
-//! Base class for all Tree::Node implementations
+//! Base class for single-thread MCTS::Node implementation
 template <typename T_Act>
 struct MCTSNodeBase {
     typedef T_Act ActType;
@@ -34,7 +34,7 @@ struct MCTSNodeBase {
     { }
 };
 
-//! Base class for multithreaded MCTreeDynamic::Node
+//! Base class for multi-thread MCTS::Node implementation
 template <typename T_Act>
 struct MCTSNodeBaseMT {
     typedef T_Act ActType;
@@ -75,95 +75,6 @@ struct MCTSNodeBaseMT {
     { }
 };
 
-//! Data container, store nodes detached, store childs as pointers
-/*!
- * \details For each node, memory is allocated dynamically.
- *          The root is stored as a node.
- *          The childs are stored as pointers.
- *          Each node stores the pointers in a vector.
- * \author adamp87
-*/
-template <typename T_NodeBase>
-class MCTreeDynamic {
-public:
-    typedef typename T_NodeBase::ActType ActType;
-
-    //! One node with childs, interface
-    class Node : public T_NodeBase {
-    private:
-        std::vector<std::unique_ptr<Node> > childs; //!< store childs as unique pointers
-
-        friend class ChildIterator;
-        friend class MCTreeDynamic;
-
-        Node(const ActType& action) : T_NodeBase(action) {}
-        Node(const Node&) = delete;
-    };
-
-    typedef Node* NodePtr; //!< pointer to a node, interface
-
-    //! Iterator to get childs of a node, interface
-    class ChildIterator {
-        size_t pos; //!< position in the child container
-        const NodePtr node; //!< get childs of this node
-
-        friend class MCTreeDynamic;
-
-        ChildIterator(NodePtr& node)
-            : pos(0), node(node) { }
-
-    public:
-        //! Returns true if not all childs have been visited, interface
-        bool hasNext() const {
-            return node->childs.size() != pos;
-        }
-
-        //! Return pointer to next child, interface
-        NodePtr next() {
-            return NodePtr(node->childs[pos++].get());
-        }
-    };
-
-private:
-    std::unique_ptr<Node> root; //!< root of the tree
-
-public:
-    //! Construct tree, interface
-    MCTreeDynamic() {
-        // artifical root, doesnt hold valid action
-        root.reset(new Node(ActType()));
-    }
-
-    //! Add a new node to parent, interface
-    NodePtr addNode(NodePtr& _parent, const ActType& act) const {
-        // init leaf node
-        std::unique_ptr<Node> child(new Node(act));
-
-        _parent->childs.push_back(std::move(child));
-        return _parent->childs.back().get();
-    }
-
-    //! Get pointer to the root, interface
-    NodePtr getRoot() const {
-        return root.get();
-    }
-
-    //! Return an iterator to get childs of node, interface
-    ChildIterator getChildIterator(NodePtr& node) const {
-        return ChildIterator(node);
-    }
-
-    //! Return the number of childs of node, interface
-    size_t getChildCount(NodePtr& node) const {
-        return node->childs.size();
-    }
-
-    //! Can be used for debug, interface for debug
-    size_t getNodeId(NodePtr& node) const {
-        return reinterpret_cast<size_t>(node);
-    }
-};
-
 //! Monte Carlo tree search to apply AI
 /*!
  * \details This class implements Monte Carlo tree search as described in Wikipedia.
@@ -172,34 +83,59 @@ public:
  *          History must be handled by the main program.
  *          The tree search does not know the exact problem it solves.
  *          Interfacing with the problem is done by template interfaces.
- *
- *          The underlying data container is transparent for this class.
- *          A container must support the template interface required by the tree search.
- *          This is not documented, but the MCTreeDynamic class is the easiest to understand the interface.
  * \author adamp87
 */
-template <class TTree, class TProblem>
-class MCTS : public TTree {
-    typedef typename TTree::Node Node;
-    typedef typename TTree::NodePtr NodePtr;
-    typedef typename Node::CountType CountType;
-    typedef typename Node::LockGuard LockGuard;
-    typedef typename TProblem::ActType ActType;
-    typedef typename TProblem::ActCounterType ActCounterType;
+template <class TProblem, class TNodeBase>
+class MCTS {
+
+    //! One node with childs, interface
+    class Node : public TNodeBase {
+    private:
+        friend class MCTS;
+        typedef typename TNodeBase::ActType ActType;
+
+        std::vector<std::unique_ptr<Node> > childs; //!< store childs as unique pointers
+
+        Node(const ActType& action) : TNodeBase(action) {}
+        Node(const Node&) = delete;
+
+        //! Add child node
+        Node* add(const ActType& action) {
+            // init leaf node
+            std::unique_ptr<Node> child(new Node(action));
+
+            childs.push_back(std::move(child));
+            return childs.back().get();
+        }
+
+        //! Get number of childs
+        size_t size() const { return childs.size(); }
+
+        //! Can be used for debug
+        size_t getNodeId() const {
+            return reinterpret_cast<size_t>(this);
+        }
+    };
+
+    typedef typename Node* NodePtr;
+    typedef typename TNodeBase::LockGuard LockGuard;
+    typedef typename TNodeBase::ActType ActType;
+    typedef typename TNodeBase::CountType CountType;
+    typedef typename std::uint_fast32_t ActCounterType;
 
 private:
-    std::default_random_engine generator;
+    std::unique_ptr<Node> root; //!< root of the tree
+    std::default_random_engine generator; //!< random generator
 
 private:
     //! Walk the tree according to the history of the problem
     NodePtr catchup(const TProblem& state, const std::vector<ActType>& history) {
-        NodePtr node = TTree::getRoot();
+        NodePtr node = root.get();
 
         for (size_t time = 0; time < history.size(); ++time) {
             bool found = false;
-            auto it = TTree::getChildIterator(node);
-            while (it.hasNext()) {
-                NodePtr child = it.next();
+            for (auto it = node->childs.begin(); it != node->childs.end(); ++it) {
+                NodePtr child = it->get();
                 if (child->action == history[time]) {
                     node = child;
                     found = true;
@@ -207,7 +143,7 @@ private:
                 }
             }
             if (!found) { // no child, update tree according to history
-                node = TTree::addNode(node, history[time]);
+                node = node->add(history[time]);
             }
         }
         return node;
@@ -220,21 +156,21 @@ private:
 
         //dirchlet
         double ratio = 0.75; // ratio of noise for root priors
-        std::vector<double> dirichlet(TTree::getChildCount(node));
+        std::vector<double> dirichlet(node->size());
         computeDirichlet(dirichlet);
 
         while (!state.isFinished()) {
 
             if (node->N == 0) { // leaf node, N will be increased by backprop
                 LockGuard guard(*node); (void)guard; // thread-safe scope on current leaf node
-                if (TTree::getChildCount(node) == 0) { // enter if have no child
+                if (node->size() == 0) { // enter if have no child
                     double P[TProblem::MaxActions];
                     ActType actions[TProblem::MaxActions];
 
                     ActCounterType nActions = state.getPossibleActions(idxAi, state.getPlayer(), actions);
                     state.computeMCTS_WP(idxAi, actions, nActions, P, W);
                     for (ActCounterType i = 0; i < nActions; ++i) { // add all child nodes as leaf nodes
-                        NodePtr n = TTree::addNode(node, actions[i]);
+                        NodePtr n = node->add(actions[i]);
                         n->P = P[i];
                     }
                     return node;
@@ -246,10 +182,10 @@ private:
             NodePtr best = node; // init
             double best_val = -std::numeric_limits<double>::max();
             double subRootVisitSqrt = sqrt(std::max(static_cast<ActCounterType>(node->N), (ActCounterType)1));
-            for (auto it = std::make_pair(0, TTree::getChildIterator(node)); it.second.hasNext(); ++it.first) {
-                NodePtr child = it.second.next();
-                const int i = it.first % dirichlet.size(); // index not goes outofbounds for child notes
-                double val = getUCB(child, subRootVisitSqrt, ratio, dirichlet[i], TProblem::UCT_C);
+            for (size_t i = 0; i < node->childs.size(); ++i) {
+                NodePtr child = node->childs[i].get();
+                const size_t idx = i % dirichlet.size(); // index not goes outofbounds for child notes
+                double val = getUCB(child, subRootVisitSqrt, ratio, dirichlet[idx], TProblem::UCT_C);
                 if (best_val < val) {
                     best = child;
                     best_val = val;
@@ -301,9 +237,8 @@ private:
     ActType selectMoveDeterministic(NodePtr node) {
         NodePtr most_ptr = node; // init
         CountType most_visit = 0;
-        auto it = TTree::getChildIterator(node);
-        while (it.hasNext()) {
-            NodePtr child = it.next();
+        for (auto it = node->childs.begin(); it != node->childs.end(); ++it) {
+            NodePtr child = it->get();
             if (most_visit < child->N) {
                 most_ptr = child;
                 most_visit = child->N;
@@ -317,8 +252,8 @@ private:
         std::vector<NodePtr> childs;
 
         // collect and compute pi
-        for (auto it = TTree::getChildIterator(node); it.hasNext(); ) {
-            NodePtr child = it.next();
+        for (auto it = node->childs.begin(); it != node->childs.end(); ++it) {
+            NodePtr child = it->get();
             pi.push_back(pow(child->N, 1.0/tau));
             childs.push_back(child);
         }
@@ -340,7 +275,11 @@ private:
     }
 
 public:
-    MCTS(int seed = 0) : generator(seed) { }
+    //! Construct tree
+    MCTS(unsigned int seed = 0) : generator(seed) {
+        // artifical root, doesnt hold valid action
+        root.reset(new Node(ActType()));
+    }
 
     //! Execute a search on the current state for the ai, return the action
     ActType execute(int idxAi,
@@ -364,8 +303,8 @@ public:
             backprop(policyNodes, W);
 
             // only one choice, dont think
-            if (TTree::getChildCount(subroot) == 1 && isDeterministic) {
-                NodePtr child = TTree::getChildIterator(subroot).next();
+            if (subroot->size() == 1 && isDeterministic) {
+                NodePtr child = subroot->childs[0].get();
                 return child->action;
             }
         }
@@ -386,8 +325,8 @@ public:
         if (isDeterministic) {
             ActType action = selectMoveDeterministic(subroot);
 
-            for (auto it = TTree::getChildIterator(subroot); it.hasNext(); ) {
-                NodePtr child = it.next();
+            for (auto it = subroot->childs.begin(); it != subroot->childs.end(); ++it) {
+                NodePtr child = it->get();
                 std::cout << TProblem::act2str(child->action) << "; "
                           << "W: " << child->W << "; "
                           << "N: " << child->N << "; "
@@ -410,9 +349,9 @@ public:
             cstate.getPolicyTrainDNN(policyDNN, idxAi, piAction);
             cstate.storeGamePolicyDNN(stateDNN, policyDNN);
 
-            for (auto it = std::make_pair(0, TTree::getChildIterator(subroot)); it.second.hasNext(); ++it.first) {
-                NodePtr child = it.second.next();
-                double pi = piAction[it.first].second;
+            for (size_t i = 0; i < subroot->childs.size(); ++i) {
+                double pi = piAction[i].second;
+                NodePtr child = subroot->childs[i].get();
                 std::cout << TProblem::act2str(child->action) << "; "
                           << "Pi: " << pi << "; "
                           << "W: " << child->W << "; "
@@ -434,8 +373,8 @@ public:
                           int opponent,
                           T& stream) {
         stream << (int)branch;
-        stream << ";" << TTree::getNodeId(next);
-        stream << ";" << TTree::getNodeId(parent);
+        stream << ";" << next->getNodeId();
+        stream << ";" << parent->getNodeId();
         stream << ";" << time; //TODO:fix
         stream << ";" << TProblem::act2str(next->action);
         stream << ";" << opponent; //TODO:fix
@@ -444,9 +383,9 @@ public:
         stream << ";" << next->W / (float)next->N;
         stream << std::endl;
 
-        auto it = TTree::getChildIterator(next);
-        while (it.hasNext()) {
-            NodePtr child = it.next();
+
+        for (auto it = next->childs.begin(); it != next->childs.end(); ++it) {
+            NodePtr child = it->get();
             writeBranchNodes(branch+1, next, child, time, maxIter, opponent, stream);
         }
     }
@@ -458,22 +397,21 @@ public:
         stream << "0;0;0;0;ROOT;0;0;0;0";
         stream << std::endl;
 
-        NodePtr parent = TTree::getRoot();
-        NodePtr child = TTree::getRoot();
+        NodePtr parent = root.get();
+        NodePtr child = root.get();
         for (size_t time = 0; time < history.size() ; ++time) {
             ActType act = history[time];
             int opponent = state.getPlayer(time) != idxAi ? 1 : 0;
 
-            auto it = TTree::getChildIterator(parent);
-            while (it.hasNext()) {
-                NodePtr next = it.next();
+            for (auto it = parent->childs.begin(); it != parent->childs.end(); ++it) {
+                NodePtr next = it->get();
 
                 if (next->action == act) {
                     child = next; // set child to selected node
 
                     stream << "0"; // not branch node, dont filter
-                    stream << ";" << TTree::getNodeId(next);
-                    stream << ";" << TTree::getNodeId(parent);
+                    stream << ";" << next->getNodeId();
+                    stream << ";" << parent->getNodeId();
                     stream << ";" << time;
                     stream << ";" << TProblem::act2str(next->action);
                     stream << ";" << opponent;

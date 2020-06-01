@@ -24,13 +24,9 @@ int getSeed() {
 #endif
 
 #ifdef _OPENMP
-typedef MCTreeDynamic<MCTSNodeBaseMT<Connect4::ActType> > TreeContainer;
-
-// keep static_assert, might be usefull later
-static_assert(std::is_same<TreeContainer, MCTreeDynamic<MCTSNodeBaseMT<Connect4::ActType> > >::value,
-              "Only MCTreeDynamic<MCTSNodeBaseMT<> > can be compiled with OpenMP");
+typedef MCTS<Connect4, MCTSNodeBaseMT<Connect4::ActType> > MCTSDef;
 #else
-typedef MCTreeDynamic<MCTSNodeBase<Connect4::ActType> > TreeContainer;
+typedef MCTS<Connect4, MCTSNodeBase<Connect4::ActType> > MCTSDef;
 #endif
 
 Connect4::ActType getCmdInput(const Connect4& state, int player) {
@@ -121,7 +117,7 @@ int main(int argc, char** argv) {
     zmq::context_t zmq_context(16);
     std::vector<Connect4::ActType> history;
     Connect4 state(zmq_context, portWhite, portBlack);
-    std::array<MCTS<TreeContainer, Connect4>, 2> ai = {seed, seed};
+    std::array<MCTSDef, 2> ai = {seed, seed};
 
     // execute game
     for (int time = 0; !state.isFinished(); ++time) {
