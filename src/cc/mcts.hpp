@@ -77,8 +77,8 @@ struct MCTSNodeBaseMT {
 
 //! Monte Carlo tree search to apply AI
 /*!
- * \details This class implements Monte Carlo tree search as described in Wikipedia.
- *          It follows the policy-rollout-backprop idea.
+ * \details This class implements Monte Carlo tree search.
+ *          It follows the policy-backprop idea, supported with DNN.
  *          Before policy, it walks the tree according to the history of the state of the problem, this is called catchup.
  *          History must be handled by the main program.
  *          The tree search does not know the exact problem it solves.
