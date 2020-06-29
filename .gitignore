@@ -1,6 +1,10 @@
 .vs
 .idea
+**.pyc
 out
 lib
+data
 build
+models
 backup
+src/python/Alpha4.egg-info
