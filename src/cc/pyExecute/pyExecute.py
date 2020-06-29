@@ -1,43 +1,20 @@
 import os
-import logging
 import threading
 import subprocess
 from argparse import ArgumentParser
-from logging.handlers import RotatingFileHandler
 
 import zmq
-import h5py
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, LeakyReLU, add
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras import regularizers
-from tensorflow.python.compiler.tensorrt import trt_convert as trt
-
-#import matplotlib.pyplot as plt
-
-log = logging.getLogger('')
-log.setLevel(logging.DEBUG)
-log_formatter = logging.Formatter('%(asctime)s --%(levelname)s-- %(message)s')
-# define a Handler which writes INFO messages or higher to console
-log_console = logging.StreamHandler()
-log_console.setFormatter(log_formatter)
-log_console.setLevel(logging.INFO)
-log.addHandler(log_console)
-
-
-def add_file_logger(log_path):
-    # set up logging to file
-    log_file = logging.handlers.RotatingFileHandler(log_path, 'a', maxBytes=1024*1024, backupCount=1024*1024)
-    log_file.setFormatter(log_formatter)
-    log_file.setLevel(logging.DEBUG)
-    log.addHandler(log_file)
+from Alpha4.database import Database
+from Alpha4.model_rt import DNNPredictRT as Predict
+from Alpha4.logger import get_logger, add_file_logger
 
 
 def plot_state(state, policy):
+    import matplotlib.pyplot as plt
     t = 0
     fig, ax = plt.subplots(1, 2, figsize=(9, 6))
     img = np.zeros((8, 8))
@@ -53,6 +30,7 @@ def plot_state(state, policy):
 
 
 def debug_state(state, policy):
+    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(3, 3)
     ax = ax.flatten()
     for t in range(8):
@@ -88,81 +66,23 @@ def debug_state(state, policy):
     print("NOAC min:{1:4.2f}, max:{1:4.2f}".format(np.min(data), np.max(data)))
 
 
-class DNNStatePolicyHandler(threading.Thread):
-    def __init__(self, zmq_context, datafilepath_hdf, dims, port="5557"):
+class DNNStatePolicyHandler(threading.Thread, Database):
+    def __init__(self, log, datafilepath_hdf, dims_state, dims_policy, zmq_context, port="5557"):
         threading.Thread.__init__(self)
-        self.dims = dims
+        Database.__init__(self, log, datafilepath_hdf, dims_state, dims_policy)
         self.socket = zmq_context.socket(zmq.REP)
         self.socket.bind("tcp://*:{0}".format(port))
 
+        self.dims = dims_state
         self.data_state = []
         self.data_policy = []
 
-        if not h5py.is_hdf5(datafilepath_hdf):
-            datafile = h5py.File(datafilepath_hdf, "w")
-            datafile.create_dataset("state", dtype=np.float32,
-                                    shape=(0, dims[0], dims[1], dims[2]),
-                                    maxshape=(None, dims[0], dims[1], dims[2]),
-                                    chunks=(42, dims[0], dims[1], dims[2]),
-                                    compression="gzip", compression_opts=1)
-            datafile.create_dataset("policy", dtype=np.float32,
-                                    shape=(0, dims[1], dims[2]),
-                                    maxshape=(None, dims[1], dims[2]),
-                                    chunks=(42 * dims[0], dims[1], dims[2]),
-                                    compression="gzip", compression_opts=1)
-            datafile.create_dataset("value", dtype=np.float32,
-                                    shape=(0, 1),
-                                    maxshape=(None, 1),
-                                    chunks=(1024 * 1024, 1),
-                                    compression="gzip", compression_opts=1)
-            datafile.create_dataset("game_idx", dtype=np.uint32,
-                                    shape=(0, 1),
-                                    maxshape=(None, 1),
-                                    chunks=(1024 * 1024, 1),
-                                    compression="gzip", compression_opts=1)
-            datafile.close()
-            log.info("Database have been created at {0}".format(datafilepath_hdf))
-        self.datafile = h5py.File(datafilepath_hdf, "a")
-
     def store_and_reset(self, game_idx, game_result):
-        dset = self.datafile["state"]
-        dset_idx = dset.shape[0]
-        dset.resize(dset_idx+len(self.data_state), axis=0)
-        dset[dset_idx:, :, :, :] = self.data_state
-
-        dset = self.datafile["policy"]
-        dset_idx = dset.shape[0]
-        dset.resize(dset_idx+len(self.data_state), axis=0)
-        dset[dset_idx:, :, :] = self.data_policy
-
-        data_z = np.empty(len(self.data_state), dtype=np.float32)
-        data_z[::2] = game_result[0]
-        data_z[1::2] = game_result[1]
-
-        dset = self.datafile["value"]
-        dset_idx = dset.shape[0]
-        dset.resize(dset_idx+len(self.data_state), axis=0)
-        dset[dset_idx:, 0] = data_z
-
-        data_game_idx = np.zeros(len(self.data_state), dtype=np.uint32) + game_idx
-        dset = self.datafile["game_idx"]
-        dset_idx = dset.shape[0]
-        dset.resize(dset_idx+len(self.data_state), axis=0)
-        dset[dset_idx:, 0] = data_game_idx
+        self.store(game_idx, self.data_state, self.data_policy, game_result)
 
         self.datafile.flush()
         self.data_state.clear()
         self.data_policy.clear()
-
-    def get_game_count(self):
-        dset = self.datafile["game_idx"]
-        idx = dset.shape[0]
-        if idx == 0:
-            return 0
-        return int(dset[idx-1])
-
-    def get_state_count(self):
-        return self.datafile["state"].shape[0]
 
     def run(self):
         def send_ok(socket):
@@ -194,41 +114,13 @@ class DNNStatePolicyHandler(threading.Thread):
                 return
 
 
-class DNNPredict(threading.Thread):
-    def __init__(self, zmq_context, dims, port="5555"):
+class DNNPredict(threading.Thread, Predict):
+    def __init__(self, input_dim, output_dim, zmq_context, port="5555"):
         threading.Thread.__init__(self)
-        self.dims = dims
+        Predict.__init__(self, input_dim, output_dim)
         self.socket = zmq_context.socket(zmq.REP)
         self.socket.bind("tcp://*:{0}".format(port))
-        self.model = ResidualCNN((self.dims[0], self.dims[1], self.dims[2]), (self.dims[1], self.dims[2]))
         self.port = port
-        self.frozen_predict = None
-
-    def save(self, path):
-        self.model.model.save_weights(os.path.join(path, 'weights', 'weights'))
-        tf.saved_model.save(self.model.model, os.path.join(path, 'saved'))
-        DNNPredict._convert(os.path.join(path, 'saved'), os.path.join(path, 'frozen'))
-        self.load(path)
-
-    def load(self, path):
-        self.model.model.load_weights(os.path.join(path, 'weights', 'weights'))
-        saved_model_loaded = tf.saved_model.load(os.path.join(path, 'frozen'), tags=[trt.tag_constants.SERVING])
-        graph_func = saved_model_loaded.signatures[trt.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
-        self.frozen_predict = trt.convert_to_constants.convert_variables_to_constants_v2(graph_func)
-
-    @staticmethod
-    def _convert(path_saved_model, path_frozen_model):
-        conversion_params = trt.DEFAULT_TRT_CONVERSION_PARAMS
-        conversion_params = conversion_params._replace(
-            max_workspace_size_bytes=(1 << 32))
-        conversion_params = conversion_params._replace(precision_mode="FP16")
-        conversion_params = conversion_params._replace(
-            maximum_cached_engines=100)
-
-        converter = trt.TrtGraphConverterV2(input_saved_model_dir=path_saved_model,
-                                            conversion_params=conversion_params)
-        converter.convert()
-        converter.save(path_frozen_model)
 
     def run(self):
         while True:
@@ -239,11 +131,7 @@ class DNNPredict(threading.Thread):
                 state.shape = (1, self.dims[0], self.dims[1], self.dims[2])
 
                 # predict
-                # value, policy = self.model.model.predict(state)
-                state = tf.convert_to_tensor(state, dtype=tf.float32)
-                prediction = self.frozen_predict(state)
-                value = prediction[1].numpy()
-                policy = prediction[0].numpy()
+                value, policy = self.predict(state)
 
                 # send prediction
                 data = np.empty((1, self.dims[1]*self.dims[2]+1), dtype=np.float32)
@@ -257,146 +145,7 @@ class DNNPredict(threading.Thread):
                 return
 
 
-class ResidualCNN:
-    def __init__(self, input_dim, output_dim):
-
-        self.hidden_layers = []
-        for i in range(20):  # AlphaZero: 40
-            self.hidden_layers.append({'filters': 128, 'kernel_size': (3, 3)})  # AlphaZero: 256
-        self.num_layers = len(self.hidden_layers)
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim[0]*output_dim[1]  # flattened
-        self.reg_const = 0.0001
-        self.learning_rate = 0.1
-
-        self.model = self._build_model()
-
-    def residual_layer(self, input_block, filters, kernel_size):
-
-        x = self.conv_layer(input_block, filters, kernel_size)
-
-        x = Conv2D(
-            filters=filters
-            , kernel_size=kernel_size
-            , data_format="channels_first"
-            , padding='same'
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
-        )(x)
-
-        x = BatchNormalization(axis=1)(x)
-
-        x = add([input_block, x])
-
-        x = ReLU()(x)
-
-        return (x)
-
-    def conv_layer(self, x, filters, kernel_size):
-
-        x = Conv2D(
-            filters=filters
-            , kernel_size=kernel_size
-            , data_format="channels_first"
-            , padding='same'
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
-        )(x)
-
-        x = BatchNormalization(axis=1)(x)
-        x = ReLU()(x)
-
-        return (x)
-
-    def value_head(self, x):
-
-        x = Conv2D(
-            filters=1
-            , kernel_size=(1, 1)
-            , data_format="channels_first"
-            , padding='same'
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
-        )(x)
-
-        x = BatchNormalization(axis=1)(x)
-        x = LeakyReLU()(x)
-
-        x = Flatten()(x)
-
-        x = Dense(
-            256
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(0.1)
-        )(x)
-
-        x = LeakyReLU()(x)
-
-        x = Dense(
-            1
-            , use_bias=False
-            , activation='tanh'
-            , kernel_regularizer=regularizers.l2(0.01)
-            , name='value_head'
-        )(x)
-
-        return (x)
-
-    def policy_head(self, x):
-
-        x = Conv2D(
-            filters=2
-            , kernel_size=(1, 1)
-            , data_format="channels_first"
-            , padding='same'
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(self.reg_const)
-        )(x)
-
-        x = BatchNormalization(axis=1)(x)
-        x = ReLU()(x)
-
-        x = Flatten()(x)
-
-        x = Dense(
-            self.output_dim
-            , use_bias=False
-            , activation='linear'
-            , kernel_regularizer=regularizers.l2(0.0001)
-            , name='policy_head'
-        )(x)
-
-        return (x)
-
-    def _build_model(self):
-
-        main_input = Input(shape=self.input_dim, name='main_input')
-
-        x = self.conv_layer(main_input, self.hidden_layers[0]['filters'], self.hidden_layers[0]['kernel_size'])
-
-        if len(self.hidden_layers) > 1:
-            for h in self.hidden_layers[1:]:
-                x = self.residual_layer(x, h['filters'], h['kernel_size'])
-
-        vh = self.value_head(x)
-        ph = self.policy_head(x)
-
-        model = Model(inputs=[main_input], outputs=[vh, ph])
-        model.compile(loss={'value_head': 'mean_squared_error', 'policy_head': tf.nn.softmax_cross_entropy_with_logits},
-                      optimizer=Adam(learning_rate=self.learning_rate),
-                      loss_weights={'value_head': 0.5, 'policy_head': 0.5}
-                      )
-
-        return model
-
-
-def execute_game(cmd_args):
+def execute_game(log, cmd_args):
     last_line = ""
     process = subprocess.Popen(cmd_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while process.poll() is None:
@@ -421,7 +170,7 @@ def execute_game(cmd_args):
     return game_result
 
 
-def self_play(args, best_model, curr_model, database):
+def self_play(log, args, best_model, curr_model, database):
     log.info("Playing")
     total_games = database.get_game_count()
     for self_play_idx in tqdm(range(total_games+1, args.self_plays+total_games+1)):
@@ -438,33 +187,11 @@ def self_play(args, best_model, curr_model, database):
 
         cmd_args = [args.path_to_exe, "portW", p_white, "portB", p_black,
                     "seed", str(seed), "deterministic", "0", "p0", "800", "p1", "800"]
-        game_result = execute_game(cmd_args)
+        game_result = execute_game(log, cmd_args)
         database.store_and_reset(self_play_idx, game_result)
 
 
-def retrain(args, model, database):
-    log.info("Retraining")
-    n_states = database.get_state_count()
-    for i in tqdm(range(args.train_epochs)):  # select different data for each epoch
-        idx = np.random.choice(np.arange(0, n_states, 1), np.min((args.train_sample_size, n_states)))
-        idx = np.sort(idx)  # hdf5 requires sorted index
-        idx = np.unique(idx)  # hdf5 does not allow repeating indices
-        state = database.datafile["state"][idx, :, :, :]
-        policy = database.datafile["policy"][idx, :, :]
-        value = database.datafile["value"][idx, :]
-        policy.shape = (policy.shape[0], policy.shape[1] * policy.shape[2])
-        targets = {'value_head': value, 'policy_head': policy}
-
-        fit = model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=64)  # 32
-        log.debug("Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
-                                                              fit.history['value_head_loss'],
-                                                              fit.history['policy_head_loss']))
-    log.info("Final Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
-                                                               fit.history['value_head_loss'],
-                                                               fit.history['policy_head_loss']))
-
-
-def evaluate(args, best_model, curr_model):
+def evaluate(log, args, best_model, curr_model):
     log.info("Evaluating")
     scores = np.array([0, 0], dtype=np.int)  # best, current
     for game_idx in tqdm(range(args.eval_plays)):
@@ -483,7 +210,7 @@ def evaluate(args, best_model, curr_model):
 
         cmd_args = [args.path_to_exe, "portW", p_white, "portB", p_black,
                     "deterministic", "1", "p0", "1600", "p1", "1600"]
-        game_result = execute_game(cmd_args)
+        game_result = execute_game(log, cmd_args)
         if game_result[idx_best] == 1:
             scores[0] += 1
             log.debug("Evaluation game {0} result: best wins".format(game_idx))
@@ -495,29 +222,31 @@ def evaluate(args, best_model, curr_model):
     return decision
 
 
-if __name__ == '__main__':
-    chess_dims = (119, 8, 8)
-    connect4_dims = (9, 6, 7)
-    project_dir = os.path.abspath(__file__).split(os.path.sep)[:-2]
-    if project_dir[0] == '':
-        project_dir[0] = '/'
-    if project_dir[0][-1] == ':':
-        project_dir[0] = os.path.join(project_dir[0], os.sep)
-    project_dir = os.path.join(*project_dir)
+def main():
+    # chess_dims = (119, 8, 8)
+    connect4_state_dims = (9, 6, 7)
+    connect4_policy_dims = (1, 6, 7)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
-    add_file_logger(os.path.join(project_dir, 'data', 'connect4.log'))
 
     parser = ArgumentParser()
+    parser.add_argument("--root_dir", type=str, help="Root dir of project", required=True)
     parser.add_argument("--human_play", action='store_true', help="Start server for human play")
     parser.add_argument("--iteration", type=int, default=0, help="Current iteration number to resume from")
     parser.add_argument("--total_iterations", type=int, default=100, help="Total number of iterations to run")
     parser.add_argument("--self_plays", type=int, default=120, help="Number of self play games to execute")
     parser.add_argument("--eval_plays", type=int, default=100, help="Number of evaluation play games to execute")
-    parser.add_argument("--path_to_exe", type=str, default=os.path.join(project_dir, 'build', 'release', 'Connect4'), help="Path to CPP MCTS exe")
-    parser.add_argument("--path_to_database", type=str, default=os.path.join(project_dir, 'data', 'connect4.hdf'), help="Path to HDF database")
+    parser.add_argument("--path_to_exe", type=str, default="Connect4", help="Path to CPP MCTS exe")
+    parser.add_argument("--path_to_database", type=str, default='connect4.hdf', help="Path to HDF database")
     parser.add_argument("--train_epochs", type=int, default=300, help="Number of epochs for training")
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
+
+    log = get_logger()
+    add_file_logger(log, os.path.join(args.root_dir, 'data', 'connect4.log'))
+    if args.path_to_database == 'connect4.hdf':
+        args.path_to_database = os.path.join(args.root_dir, 'data', 'connect4.hdf')
+    if args.path_to_exe == 'Connect4':
+        args.path_to_exe = os.path.join(args.root_dir, 'build', 'release', 'Connect4')
 
     log.info("TensorFlow V: {0}, CUDA: {1}".format(tf.__version__, tf.test.is_built_with_cuda()))
     for gpu in tf.config.list_physical_devices('GPU'):
@@ -525,16 +254,17 @@ if __name__ == '__main__':
         tf.config.experimental.set_memory_growth(gpu, True)
 
     context = zmq.Context(1)
-    best_model = DNNPredict(context, connect4_dims, port="5555")
-    curr_model = DNNPredict(context, connect4_dims, port="5556")
-    database = DNNStatePolicyHandler(context, args.path_to_database, connect4_dims, port="5557")
+    best_model = DNNPredict(connect4_state_dims, connect4_policy_dims, context, port="5555")
+    curr_model = DNNPredict(connect4_state_dims, connect4_policy_dims, context, port="5556")
+    database = DNNStatePolicyHandler(log, args.path_to_database, connect4_state_dims,
+                                     connect4_policy_dims, context, port="5557")
 
-    if not os.path.isdir(os.path.join(project_dir, 'models', 'best_0')):
-        best_model.save(os.path.join(project_dir, 'models', 'best_0'))
+    if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):
+        best_model.save(os.path.join(args.root_dir, 'models', 'best_0'))
         best_model.model.model.summary()
         log.info("Created new weights")
-    best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
-    curr_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(args.iteration)))
+    best_model.load(os.path.join(args.root_dir, 'models', 'best_{0}'.format(args.iteration)))
+    curr_model.load(os.path.join(args.root_dir, 'models', 'best_{0}'.format(args.iteration)))
 
     # Test Code
     # curr_model.load_weight(os.path.join(project_dir, 'models', 'save_1', 'weights'))
@@ -560,13 +290,13 @@ if __name__ == '__main__':
     try:
         for iteration_idx in range(args.iteration+1, args.iteration+args.total_iterations+1):
             log.info("Starting iteration: {0}".format(iteration_idx))
-            self_play(args, best_model, curr_model, database)
-            retrain(args, curr_model.model.model, database)
-            curr_model.save(os.path.join(project_dir, 'models', 'save_{0}'.format(iteration_idx)))
-            if evaluate(args, best_model, curr_model):
+            self_play(log, args, best_model, curr_model, database)
+            curr_model.retrain(args, curr_model.model.model, database)
+            curr_model.save(os.path.join(args.root_dir, 'models', 'save_{0}'.format(iteration_idx)))
+            if evaluate(log, args, best_model, curr_model):
                 log.info("New best model have been found in iteration: {0}".format(iteration_idx))
-                curr_model.save(os.path.join(project_dir, 'models', 'best_{0}'.format(iteration_idx)))
-                best_model.load(os.path.join(project_dir, 'models', 'best_{0}'.format(iteration_idx)))
+                curr_model.save(os.path.join(args.root_dir, 'models', 'best_{0}'.format(iteration_idx)))
+                best_model.load(os.path.join(args.root_dir, 'models', 'best_{0}'.format(iteration_idx)))
     except KeyboardInterrupt:
         pass
     context.term()
@@ -574,3 +304,6 @@ if __name__ == '__main__':
     best_model.join()
     curr_model.join()
 
+
+if __name__ == '__main__':
+    main()
