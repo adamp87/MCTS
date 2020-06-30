@@ -93,7 +93,7 @@ def main():
     args = parser.parse_args()
 
     log = get_logger()
-    add_file_logger(log, os.path.join(args.root_dir, 'data', 'connect4.log'))
+    add_file_logger(log, os.path.join(args.root_dir, 'data', Problem.name+'.log'))
     if args.path_to_database == Problem.name+'.hdf':
         args.path_to_database = os.path.join(args.root_dir, 'data', Problem.name+'.hdf')
 

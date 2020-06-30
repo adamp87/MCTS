@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 from tensorflow.python.compiler.tensorrt import trt_convert as trt
 
-from model import DNNPredict
+from Alpha4.model import DNNPredict
 
 
 class DNNPredictRT(DNNPredict):
