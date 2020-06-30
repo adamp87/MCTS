@@ -29,17 +29,18 @@ class ResidualCNN:
 
         x = self.conv_layer(input_block, filters, kernel_size)
 
+        x = tf.keras.layers.Permute((2, 3, 1))(x)
         x = Conv2D(
             filters=filters
             , kernel_size=kernel_size
-            , data_format="channels_first"
+            , data_format="channels_last"
             , padding='same'
             , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
-
-        x = BatchNormalization(axis=1)(x)
+        x = BatchNormalization(axis=3)(x)
+        x = tf.keras.layers.Permute((3, 1, 2))(x)
 
         x = add([input_block, x])
 
@@ -49,34 +50,38 @@ class ResidualCNN:
 
     def conv_layer(self, x, filters, kernel_size):
 
+        x = tf.keras.layers.Permute((2, 3, 1))(x)
         x = Conv2D(
             filters=filters
             , kernel_size=kernel_size
-            , data_format="channels_first"
+            , data_format="channels_last"
             , padding='same'
             , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
+        x = BatchNormalization(axis=3)(x)
+        x = tf.keras.layers.Permute((3, 1, 2))(x)
 
-        x = BatchNormalization(axis=1)(x)
         x = ReLU()(x)
 
         return (x)
 
     def value_head(self, x):
 
+        x = tf.keras.layers.Permute((2, 3, 1))(x)
         x = Conv2D(
             filters=1
             , kernel_size=(1, 1)
-            , data_format="channels_first"
+            , data_format="channels_last"
             , padding='same'
             , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
+        x = BatchNormalization(axis=3)(x)
+        x = tf.keras.layers.Permute((3, 1, 2))(x)
 
-        x = BatchNormalization(axis=1)(x)
         x = LeakyReLU()(x)
 
         x = Flatten()(x)
@@ -102,17 +107,19 @@ class ResidualCNN:
 
     def policy_head(self, x):
 
+        x = tf.keras.layers.Permute((2, 3, 1))(x)
         x = Conv2D(
             filters=2
             , kernel_size=(1, 1)
-            , data_format="channels_first"
+            , data_format="channels_last"
             , padding='same'
             , use_bias=False
             , activation='linear'
             , kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
+        x = BatchNormalization(axis=3)(x)
+        x = tf.keras.layers.Permute((3, 1, 2))(x)
 
-        x = BatchNormalization(axis=1)(x)
         x = ReLU()(x)
 
         x = Flatten()(x)

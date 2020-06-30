@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from Alpha4.mcts import MCTS
-from Alpha4.model import DNNPredict as Predict
+from Alpha4.model_lite import DNNPredictLite as Predict
 from Alpha4.database import Database
 from Alpha4.connect4 import Connect4 as Problem
 from Alpha4.logger import get_logger, add_file_logger
