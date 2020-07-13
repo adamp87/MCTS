@@ -22,8 +22,8 @@ class Connect4:
     """
     ALPHA = 1.0 / 7.0  # in average seven actions are possible
     UCT_C = 1.0  # constant for ucb computation
-    dims_state = (3, 6, 7)  # dimension of the input state
-    dims_policy = (1, 6, 7)  # dimension of the output policy
+    dims_state = (6, 7, 3)  # dimension of the input state
+    dims_policy = (6, 7, 1)  # dimension of the output policy
     name = "connect4"
 
     def __init__(self, model_p1, model_p2):

@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import tensorflow as tf
 
 from Alpha4.model import DNNPredict
@@ -23,8 +24,26 @@ class DNNPredictLite(DNNPredict):
         return value[0, 0], policy
 
     def save(self, path):
+        def representative_dataset_gen():
+            num_calibration_steps = 128
+            for i in range(num_calibration_steps):
+                data = np.zeros((1, 6, 7, 3), dtype=np.float32)
+                if i % 2 == 1:
+                    data[0, :, :, 2] = 1
+                x = np.random.randint(0, 6, 8)
+                y = np.random.randint(0, 7, 8)
+                data[0, x, y, 0] = 1
+                x = np.random.randint(0, 6, 8)
+                y = np.random.randint(0, 7, 8)
+                data[0, x, y, 1] = 1
+                yield [data]
         DNNPredict.save(self, path)
         converter = tf.lite.TFLiteConverter.from_saved_model(os.path.join(path, 'saved'))
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter.representative_dataset = representative_dataset_gen
+        converter.inference_input_type = tf.uint8
+        converter.inference_output_type = tf.int8
+        #converter.experimental_new_converter = False
         self.tflite_model = converter.convert()
 
         # Save the TF Lite model
