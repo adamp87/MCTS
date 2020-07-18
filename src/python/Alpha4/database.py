@@ -64,12 +64,16 @@ class Database:
         self.datafile.flush()
 
     def get_game_count(self):
-        # TODO idx must not be sequential
+        """
+        Get the number of executed self-play games.
+        note: Sequential storage in database is not guaranteed.
+        """
         dset = self.datafile["game_idx"]
-        idx = dset.shape[0]
-        if idx == 0:
+        count = dset.shape[0]
+        if count == 0:
             return 0
-        return int(dset[idx-1])
+        return np.max(dset)
 
     def get_state_count(self):
+        """Get number of stored states (training samples)"""
         return self.datafile["state"].shape[0]
