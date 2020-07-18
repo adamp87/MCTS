@@ -1,5 +1,4 @@
 import numpy as np
-from os import linesep
 
 
 class Connect4Action:
@@ -22,34 +21,35 @@ class Connect4:
     """
     ALPHA = 1.0 / 7.0  # in average seven actions are possible
     UCT_C = 1.0  # constant for ucb computation
-    dims_state = (3, 6, 7)  # dimension of the input state
+    dnn_history = 2  # number of previous turns to add to dnn
+    dims_state = (3 * (dnn_history + 1), 6, 7)  # dimension of the input state
     dims_policy = (1, 6, 7)  # dimension of the output policy
     name = "connect4"
 
     def __init__(self, model_p1, model_p2):
-        self.time = 0
+        self.time = 0  # incremented on each move
+        self.history = []  # previous board positions
         self.models = [model_p1, model_p2]  # can be [white, black] or [black, white]
         self.finished = [False, False]  # flag for each player
         self.board = np.zeros((6, 7), dtype=np.int8)  # 0-empty, 1-p1, 2-p2
 
     def __str__(self):
-        ret = ""
-        fig = [' ', 'O', 'X']
+        fig = np.array([' ', 'O', 'X'], dtype=str)
         board = np.flip(self.board)  # start printing out from top
-        for y in range(6):
-            for x in range(7):
-                ret += '|'
-                ret += fig[board[y, x]]
-            ret += '|'+linesep
-        return ret
+        return np.array2string(fig[board], separator='|')
 
     def copy(self):
         """Make deep-copy of object, TFModels are not copied"""
         copy = Connect4(self.models[0], self.models[1])
         copy.time = self.time
         copy.board = self.board.copy()
+        copy.history = self.history.copy()
         copy.finished = self.finished.copy()
         return copy
+
+    def get_time(self):
+        """Return the current time(turn) number"""
+        return self.time
 
     def get_player(self, time=-1):
         """Return idx of current player"""
@@ -93,14 +93,15 @@ class Connect4:
                 count += 1
             return count >= 4
 
-        empyt_count = 0
+        empty_count = 0
         idx_ai = self.get_player()
+        self.history.append(self.board.copy())
         self.board[action.y, action.x] = idx_ai + 1
 
         for y in range(6):
             for x in range(7):
                 if self.board[y, x] == 0:
-                    empyt_count += 1
+                    empty_count += 1
                 if self.board[y, x] != idx_ai+1:
                     continue
 
@@ -113,19 +114,22 @@ class Connect4:
                 if scan_line(x, y, -1, 1):
                     self.finished[idx_ai] = True
 
-        if empyt_count == 0 and not self.finished[0] and not self.finished[1]:
+        if empty_count == 0 and not self.finished[0] and not self.finished[1]:
             self.finished[0] = self.finished[1] = True  # even
 
         self.time += 1
 
     def get_game_state_dnn(self):
         """Return input state for DNN"""
-        # TODO history
-        input = np.zeros(Connect4.dims_state, dtype=np.float32)
-        input[0, self.board == 1] = 1  # one-hot encoding for player 1
-        input[1, self.board == 2] = 1  # one-hot encoding for player 2
-        input[2, :, :] = self.get_player()  # layer to encode current player
-        return input
+        boards = [self.board]
+        boards += [self.history[-1 - i] for i in range(min(Connect4.dnn_history, len(self.history)))]
+        state = np.zeros(Connect4.dims_state, dtype=np.float32)
+        for t in range(len(boards)):
+            board = boards[t]
+            state[0 + t * 3, board == 1] = 1  # one-hot encoding for player 1
+            state[1 + t * 3, board == 2] = 1  # one-hot encoding for player 2
+            state[2 + t * 3, :, :] = self.get_player(self.time - t)  # layer to encode current player
+        return state
 
     def compute_mcts_wp(self, actions):
         """
@@ -134,12 +138,11 @@ class Connect4:
         :return: prediction of policy layer -> priors
         :return: prediction of value layer -> win
         """
-
         # perform state evaluation with DNN
         player_idx = self.get_player()
-        input = self.get_game_state_dnn()
-        input = np.expand_dims(input, axis=0)  # batch size 1
-        value, policy = self.models[player_idx].predict(input)
+        state = self.get_game_state_dnn()
+        state = np.expand_dims(state, axis=0)  # batch size 1
+        value, policy = self.models[player_idx].predict(state)
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
 
         policy = np.array([policy[0, act.y, act.x] for act in actions])  # collect valid policy values

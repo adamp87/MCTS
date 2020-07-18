@@ -38,7 +38,8 @@ def self_play(args, best_model, curr_model, database, log):
 
             states.append(state)
             policies.append(policy)
-            log.debug("State of game {0}:"+os.linesep+"{1}".format(self_play_idx, problem))
+            log.debug("State of game {0}:{1}{2}".format(self_play_idx, os.linesep, problem))
+            # log.debug("Input DNN State:{0}{1}".format(os.linesep, problem.get_game_state_dnn()))
         result = problem.get_result()
         result = np.tile(result, int(np.ceil(len(states)/2)))[:len(states)]
 
