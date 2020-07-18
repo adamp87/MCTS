@@ -32,7 +32,7 @@ class MCTS:
         """
         node = self.sub_root
         visited_nodes.append(node)  # store subroot in visited nodes
-        dirichlet_noise = np.random.dirichlet([state.ALPHA], len(node.childs))
+        dirichlet_noise = np.random.dirichlet([state.ALPHA] * len(node.childs))
         while not state.is_finished():
             if len(node.childs) == 0:  # leaf node
                 actions = state.get_actions()  # get possible actions

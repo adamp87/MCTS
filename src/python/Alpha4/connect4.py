@@ -146,7 +146,7 @@ class Connect4:
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
 
         policy = np.array([policy[0, act.y, act.x] for act in actions])  # collect valid policy values
-        policy = np.exp(policy) / (np.sum(policy) + np.finfo(np.float32).eps)  # softmax
+        policy = np.exp(policy) / (np.sum(np.exp(policy)) + np.finfo(np.float32).eps)  # softmax
         return policy, value
 
     @staticmethod
