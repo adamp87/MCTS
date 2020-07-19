@@ -11,6 +11,7 @@ from tqdm import tqdm
 from Alpha4.database import Database
 from Alpha4.model_rt import DNNPredictRT as Predict
 from Alpha4.logger import get_logger, add_file_logger
+from Alpha4.connect4 import Connect4 as Problem
 
 
 def plot_state(state, policy):
@@ -73,7 +74,8 @@ class DNNStatePolicyHandler(threading.Thread, Database):
         self.socket = zmq_context.socket(zmq.REP)
         self.socket.bind("tcp://*:{0}".format(port))
 
-        self.dims = dims_state
+        self.dims_state = dims_state
+        self.dims_policy = dims_policy
         self.data_state = []
         self.data_policy = []
 
@@ -98,14 +100,18 @@ class DNNStatePolicyHandler(threading.Thread, Database):
                 #  receive state
                 message = self.socket.recv()
                 state = np.frombuffer(message, dtype=np.float32)
-                state.shape = (self.dims[0], self.dims[1], self.dims[2])
+                state.shape = (self.dims_state[2], self.dims_state[0], self.dims_state[1])
                 send_ok(self.socket)
 
                 # receive policy
                 message = self.socket.recv()
                 policy = np.frombuffer(message, dtype=np.float32)
-                policy.shape = (self.dims[1], self.dims[2])
+                policy.shape = (self.dims_policy[2], self.dims_policy[0], self.dims_policy[1])
                 send_ok(self.socket)
+
+                # NCWH to NWHC
+                state = np.transpose(state, axes=(1, 2, 0))
+                policy = np.transpose(policy, axes=(1, 2, 0))
 
                 self.data_state.append(state)
                 self.data_policy.append(policy)
@@ -128,15 +134,21 @@ class DNNPredict(threading.Thread, Predict):
                 # get state
                 message = self.socket.recv()
                 state = np.frombuffer(message, dtype=np.float32)
-                state.shape = (1, self.dims[0], self.dims[1], self.dims[2])
+                state.shape = (1, self.input_dim[2], self.input_dim[0], self.input_dim[1])
+                state = np.transpose(state, axes=(0, 2, 3, 1))  # NCWH to NWHC
 
                 # predict
                 value, policy = self.predict(state)
 
+                # NWHC to NCWH
+                policy.shape = self.output_dim
+                policy = np.transpose(policy, axes=(2, 0, 1))
+                policy.shape = (policy.size, )
+
                 # send prediction
-                data = np.empty((1, self.dims[1]*self.dims[2]+1), dtype=np.float32)
-                data[0, :self.dims[1]*self.dims[2]] = policy
-                data[0, self.dims[1]*self.dims[2]] = value
+                data = np.empty((1, self.output_dim[0]*self.output_dim[1]*self.output_dim[2]+1), dtype=np.float32)
+                data[0, :self.output_dim[0]*self.output_dim[1]*self.output_dim[2]] = policy
+                data[0, self.output_dim[0]*self.output_dim[1]*self.output_dim[2]] = value
                 data = np.array(data).tobytes()
                 self.socket.send(data)
 
@@ -224,8 +236,10 @@ def evaluate(log, args, best_model, curr_model):
 
 def main():
     # chess_dims = (119, 8, 8)
-    connect4_state_dims = (9, 6, 7)
-    connect4_policy_dims = (1, 6, 7)
+    db_name = Problem.name+'.hdf'
+    exe_name = "Connect4"
+    dims_state = Problem.dims_state
+    dims_policy = Problem.dims_policy
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
 
     parser = ArgumentParser()
@@ -235,8 +249,8 @@ def main():
     parser.add_argument("--total_iterations", type=int, default=100, help="Total number of iterations to run")
     parser.add_argument("--self_plays", type=int, default=120, help="Number of self play games to execute")
     parser.add_argument("--eval_plays", type=int, default=100, help="Number of evaluation play games to execute")
-    parser.add_argument("--path_to_exe", type=str, default="Connect4", help="Path to CPP MCTS exe")
-    parser.add_argument("--path_to_database", type=str, default='connect4.hdf', help="Path to HDF database")
+    parser.add_argument("--path_to_exe", type=str, default=exe_name, help="Path to CPP MCTS exe")
+    parser.add_argument("--path_to_database", type=str, default=db_name, help="Path to HDF database")
     parser.add_argument("--train_epochs", type=int, default=300, help="Number of epochs for training")
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
@@ -254,10 +268,9 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     context = zmq.Context(1)
-    best_model = DNNPredict(connect4_state_dims, connect4_policy_dims, context, port="5555")
-    curr_model = DNNPredict(connect4_state_dims, connect4_policy_dims, context, port="5556")
-    database = DNNStatePolicyHandler(log, args.path_to_database, connect4_state_dims,
-                                     connect4_policy_dims, context, port="5557")
+    best_model = DNNPredict(dims_state, dims_policy, context, port="5555")
+    curr_model = DNNPredict(dims_state, dims_policy, context, port="5556")
+    database = DNNStatePolicyHandler(log, args.path_to_database, dims_state, dims_policy, context, port="5557")
 
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):
         best_model.save(os.path.join(args.root_dir, 'models', 'best_0'))

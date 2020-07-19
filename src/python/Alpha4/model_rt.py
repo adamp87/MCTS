@@ -10,21 +10,21 @@ class DNNPredictRT(DNNPredict):
         DNNPredict.__init__(self, input_dim, output_dim)
         self.frozen_predict = None
 
-    def predict(self, input):
-        input = tf.convert_to_tensor(input, dtype=tf.float32)
-        prediction = self.frozen_predict(input)
+    def predict(self, state):
+        state = tf.convert_to_tensor(state, dtype=tf.float32)
+        prediction = self.frozen_predict(state)
         value = prediction[1].numpy()
         policy = prediction[0].numpy()
         return value[0, 0], policy
 
     def save(self, path):
         DNNPredict.save(self, path)
-        DNNPredictRT._convert(os.path.join(path, 'saved'), os.path.join(path, 'frozen'))
+        DNNPredictRT._convert(os.path.join(path, 'saved'), os.path.join(path, 'trt'))
         self.load(path)  # load converted model
 
     def load(self, path):
         DNNPredict.load(self, path)
-        frozen_model = tf.saved_model.load(os.path.join(path, 'frozen'), tags=[trt.tag_constants.SERVING])
+        frozen_model = tf.saved_model.load(os.path.join(path, 'trt'), tags=[trt.tag_constants.SERVING])
         graph_func = frozen_model.signatures[trt.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
         self.frozen_predict = trt.convert_to_constants.convert_variables_to_constants_v2(graph_func)
 

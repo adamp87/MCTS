@@ -122,9 +122,9 @@ class Connect4:
         """Return input state for DNN"""
         # TODO history
         input = np.zeros(Connect4.dims_state, dtype=np.float32)
-        input[0, self.board == 1] = 1  # one-hot encoding for player 1
-        input[1, self.board == 2] = 1  # one-hot encoding for player 2
-        input[2, :, :] = self.get_player()  # layer to encode current player
+        input[self.board == 1, 0] = 1  # one-hot encoding for player 1
+        input[self.board == 2, 1] = 1  # one-hot encoding for player 2
+        input[:, :, 2] = self.get_player()  # layer to encode current player
         return input
 
     def compute_mcts_wp(self, actions):
@@ -142,7 +142,7 @@ class Connect4:
         value, policy = self.models[player_idx].predict(input)
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
 
-        policy = np.array([policy[0, act.y, act.x] for act in actions])  # collect valid policy values
+        policy = np.array([policy[act.y, act.x, 0] for act in actions])  # collect valid policy values
         policy = np.exp(policy) / (np.sum(policy) + np.finfo(np.float32).eps)  # softmax
         return policy, value
 
@@ -155,7 +155,7 @@ class Connect4:
         :return: policy layer
         """
         policy = np.zeros(Connect4.dims_policy, dtype=np.float32)
-        action_idx = [(0, act.y, act.x) for act in actions]  # indices where valid actions present in board
+        action_idx = [(act.y, act.x, 0) for act in actions]  # indices where valid actions present in board
         for i in range(len(action_idx)):
             policy[action_idx[i]] = pi[i]  # set positions with priors
         return policy

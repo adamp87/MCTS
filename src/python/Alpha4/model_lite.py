@@ -13,9 +13,9 @@ class DNNPredictLite(DNNPredict):
         self.input_details = None
         self.output_details = None
 
-    def predict(self, input):
-        input = tf.convert_to_tensor(input, dtype=tf.float32)
-        self.interpreter.set_tensor(self.input_details[0]['index'], input)
+    def predict(self, state):
+        state = tf.convert_to_tensor(state, dtype=tf.float32)
+        self.interpreter.set_tensor(self.input_details[0]['index'], state)
 
         self.interpreter.invoke()
         policy = self.interpreter.get_tensor(self.output_details[0]['index'])
@@ -43,7 +43,7 @@ class DNNPredictLite(DNNPredict):
         converter.representative_dataset = representative_dataset_gen
         converter.inference_input_type = tf.uint8
         converter.inference_output_type = tf.int8
-        #converter.experimental_new_converter = False
+        # converter.experimental_new_converter = False
         self.tflite_model = converter.convert()
 
         # Save the TF Lite model
