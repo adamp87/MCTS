@@ -22,8 +22,8 @@ class Connect4:
     ALPHA = 1.0 / 7.0  # in average seven actions are possible
     UCT_C = 1.0  # constant for ucb computation
     dnn_history = 2  # number of previous turns to add to dnn
-    dims_state = (3 * (dnn_history + 1), 6, 7)  # dimension of the input state
-    dims_policy = (1, 6, 7)  # dimension of the output policy
+    dims_state = (6, 7, 3 * (dnn_history + 1))  # dimension of the input state
+    dims_policy = (6, 7, 1)  # dimension of the output policy
     name = "connect4"
 
     def __init__(self, model_p1, model_p2):
@@ -126,9 +126,9 @@ class Connect4:
         state = np.zeros(Connect4.dims_state, dtype=np.float32)
         for t in range(len(boards)):
             board = boards[t]
-            state[0 + t * 3, board == 1] = 1  # one-hot encoding for player 1
-            state[1 + t * 3, board == 2] = 1  # one-hot encoding for player 2
-            state[2 + t * 3, :, :] = self.get_player(self.time - t)  # layer to encode current player
+            state[board == 1, 0 + t * 3] = 1  # one-hot encoding for player 1
+            state[board == 2, 1 + t * 3] = 1  # one-hot encoding for player 2
+            state[:, :, 2 + t * 3] = self.get_player(self.time - t)  # layer to encode current player
         return state
 
     def compute_mcts_wp(self, actions):
@@ -145,7 +145,7 @@ class Connect4:
         value, policy = self.models[player_idx].predict(state)
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
 
-        policy = np.array([policy[0, act.y, act.x] for act in actions])  # collect valid policy values
+        policy = np.array([policy[act.y, act.x, 0] for act in actions])  # collect valid policy values
         policy = np.exp(policy) / (np.sum(np.exp(policy)) + np.finfo(np.float32).eps)  # softmax
         return policy, value
 
@@ -158,7 +158,7 @@ class Connect4:
         :return: policy layer
         """
         policy = np.zeros(Connect4.dims_policy, dtype=np.float32)
-        action_idx = [(0, act.y, act.x) for act in actions]  # indices where valid actions present in board
+        action_idx = [(act.y, act.x, 0) for act in actions]  # indices where valid actions present in board
         for i in range(len(action_idx)):
             policy[action_idx[i]] = pi[i]  # set positions with priors
         return policy
