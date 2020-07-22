@@ -162,7 +162,7 @@ public:
     }
 
     void getGameStateDNN(std::vector<float>& data, int idxMe) const {
-        const int T = 4;
+        const int T = 2;
         const int p1_piece_start = 0;
         const int p1_piece_count = T * 6 * 7;
         const int p2_piece_start = p1_piece_start + p1_piece_count;
