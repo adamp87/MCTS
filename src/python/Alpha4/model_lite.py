@@ -1,4 +1,6 @@
 import os
+import subprocess
+
 import numpy as np
 import tensorflow as tf
 
@@ -6,8 +8,11 @@ from Alpha4.model import DNNPredict
 
 
 class DNNPredictLite(DNNPredict):
-    def __init__(self, log, input_dim, output_dim):
+    def __init__(self, log, input_dim, output_dim, database, delegate=None, compile_tpu=True):
         DNNPredict.__init__(self, log, input_dim, output_dim)
+        self.database = database
+        self.delegate = delegate
+        self.compile_tpu = compile_tpu
         self.interpreter = None
         self.tflite_model = None
         self.input_details = None
@@ -25,18 +30,15 @@ class DNNPredictLite(DNNPredict):
 
     def save(self, path):
         def representative_dataset_gen():
-            num_calibration_steps = 128
-            for i in range(num_calibration_steps):
-                data = np.zeros((1, 6, 7, 9), dtype=np.float32)
-                if i % 2 == 1:
-                    data[0, :, :, 2] = 1
-                x = np.random.randint(0, 6, 8)
-                y = np.random.randint(0, 7, 8)
-                data[0, x, y, 0] = 1
-                x = np.random.randint(0, 6, 8)
-                y = np.random.randint(0, 7, 8)
-                data[0, x, y, 1] = 1
-                yield [data]
+            # generate (1, W, H, C) tensors
+            for i in range(state.shape[0]):
+                yield [state[i, :, :, :][np.newaxis, :, :, :]]
+
+        if self.database.get_state_count() == 0:
+            self.log.error('No state has been saved in database. Please generate states first with DNNPredict')
+            exit(-1)
+        state, _, _ = self.database.load(8192)  # load states from database for generation of representative dataset
+
         DNNPredict.save(self, path)
         converter = tf.lite.TFLiteConverter.from_saved_model(os.path.join(path, 'saved'))
         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
@@ -50,14 +52,25 @@ class DNNPredictLite(DNNPredict):
         with tf.io.gfile.GFile(os.path.join(path, 'tflite'), 'wb') as f:
             f.write(self.tflite_model)
 
+        if self.compile_tpu:
+            cmd = ['edgetpu_compiler', os.path.join(path, 'tflite'), '-o', path]
+            tpu_compile = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            for line in tpu_compile.stdout:
+                self.log.debug(line.decode().replace('\n', ''))
+            tpu_compile.wait()
+            if tpu_compile.returncode != 0:
+                self.log.error("Failed to compile for TPU")
+                exit(-1)
+
         self.load(path)  # load converted model
 
     def load(self, path):
         DNNPredict.load(self, path)
-        with tf.io.gfile.GFile(os.path.join(path, 'tflite'), 'rb') as f:
+        tf_name = 'tflite_edgetpu.tflite' if self.delegate is not None else 'tflite'
+        with tf.io.gfile.GFile(os.path.join(path, tf_name), 'rb') as f:
             self.tflite_model = f.read()
 
-        self.interpreter = tf.lite.Interpreter(model_content=self.tflite_model)
+        self.interpreter = tf.lite.Interpreter(model_content=self.tflite_model, experimental_delegates=self.delegate)
         self.interpreter.allocate_tensors()
 
         self.input_details = self.interpreter.get_input_details()
