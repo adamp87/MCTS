@@ -144,14 +144,15 @@ class ResidualCNN:
 
 
 class DNNPredict(ResidualCNN):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, log, input_dim, output_dim):
         ResidualCNN.__init__(self, input_dim, output_dim)
+        self.log = log
 
     def predict(self, state):
         value, policy = self.model.predict(state)
         return value[0, 0], policy
 
-    def retrain(self, log, args, database):
+    def retrain(self, args, database):
         fit = None
         self.log.info("Retraining")
         for _ in tqdm(range(args.train_epochs)):  # select different data for each epoch
@@ -160,12 +161,12 @@ class DNNPredict(ResidualCNN):
             targets = {'value_head': value, 'policy_head': policy}
 
             fit = self.model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=32)
-            log.debug("Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
-                                                                  fit.history['value_head_loss'],
-                                                                  fit.history['policy_head_loss']))
-        log.info("Final Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
-                                                                   fit.history['value_head_loss'],
-                                                                   fit.history['policy_head_loss']))
+            self.log.debug("Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
+                                                                       fit.history['value_head_loss'],
+                                                                       fit.history['policy_head_loss']))
+        self.log.info("Final Loss: {0}, Value: {1}, Policy: {2}".format(fit.history['loss'],
+                                                                        fit.history['value_head_loss'],
+                                                                        fit.history['policy_head_loss']))
 
     def save(self, path):
         self.model.save_weights(os.path.join(path, 'weights', 'weights'))

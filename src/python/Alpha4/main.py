@@ -79,7 +79,7 @@ def evaluate(args, best_model, curr_model, log):
 
 
 def main():
-    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Tensorflow logging level
 
     parser = ArgumentParser()
     parser.add_argument("--root_dir", type=str, help="Root dir of project", required=True)
@@ -104,6 +104,8 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     database = Database(log, args.path_to_database, Problem.dims_state, Problem.dims_policy)
+    best_model = Predict(log, Problem.dims_state, Problem.dims_policy)
+    curr_model = Predict(log, Problem.dims_state, Problem.dims_policy)
 
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):
         best_model.save(os.path.join(args.root_dir, 'models', 'best_0'))
@@ -121,7 +123,7 @@ def main():
         for iteration_idx in range(args.iteration+1, args.iteration+args.total_iterations+1):
             log.info("Starting iteration: {0}".format(iteration_idx))
             self_play(args, best_model, curr_model, database, log)
-            curr_model.retrain(log, args, database)
+            curr_model.retrain(args, database)
             curr_model.save(os.path.join(args.root_dir, 'models', 'save_{0}'.format(iteration_idx)))
             if evaluate(args, best_model, curr_model, log):
                 log.info("New best model have been found in iteration: {0}".format(iteration_idx))

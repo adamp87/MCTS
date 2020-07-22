@@ -6,8 +6,8 @@ from Alpha4.model import DNNPredict
 
 
 class DNNPredictLite(DNNPredict):
-    def __init__(self, input_dim, output_dim):
-        DNNPredict.__init__(self, input_dim, output_dim)
+    def __init__(self, log, input_dim, output_dim):
+        DNNPredict.__init__(self, log, input_dim, output_dim)
         self.interpreter = None
         self.tflite_model = None
         self.input_details = None
