@@ -63,6 +63,15 @@ class Database:
 
         self.datafile.flush()
 
+    def load(self, count):
+        n_states = self.get_state_count()
+        idx = np.random.choice(np.arange(0, n_states, 1), np.min((count, n_states)), replace=False)
+        idx = np.sort(idx)  # hdf5 requires sorted index
+        state = np.array(self.datafile["state"][idx, :, :, :])
+        policy = np.array(self.datafile["policy"][idx, :, :, :])
+        value = np.array(self.datafile["value"][idx, :])
+        return state, policy, value
+
     def get_game_count(self):
         """
         Get the number of executed self-play games.

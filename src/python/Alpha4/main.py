@@ -103,8 +103,6 @@ def main():
         log.info("GPU: {0}".format(gpu))
         tf.config.experimental.set_memory_growth(gpu, True)
 
-    best_model = Predict(Problem.dims_state, Problem.dims_policy)
-    curr_model = Predict(Problem.dims_state, Problem.dims_policy)
     database = Database(log, args.path_to_database, Problem.dims_state, Problem.dims_policy)
 
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):

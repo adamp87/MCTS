@@ -1,5 +1,4 @@
 import os
-import numpy as np
 from tqdm import tqdm
 
 import tensorflow as tf
@@ -154,15 +153,10 @@ class DNNPredict(ResidualCNN):
 
     def retrain(self, log, args, database):
         fit = None
-        log.info("Retraining")
-        n_states = database.get_state_count()
+        self.log.info("Retraining")
         for _ in tqdm(range(args.train_epochs)):  # select different data for each epoch
-            idx = np.random.choice(np.arange(0, n_states, 1), np.min((args.train_sample_size, n_states)), replace=False)
-            idx = np.sort(idx)  # hdf5 requires sorted index
-            state = database.datafile["state"][idx, :, :, :]
-            policy = database.datafile["policy"][idx, :, :, :]
-            value = database.datafile["value"][idx, :]
-            policy.shape = (idx.shape[0], policy.shape[1] * policy.shape[2] * policy.shape[3])
+            state, policy, value = database.load(args.train_sample_size)
+            policy.shape = (policy.shape[0], policy.shape[1] * policy.shape[2] * policy.shape[3])
             targets = {'value_head': value, 'policy_head': policy}
 
             fit = self.model.fit(state, targets, epochs=1, verbose=0, validation_split=0, batch_size=32)
