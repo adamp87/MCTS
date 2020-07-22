@@ -6,8 +6,8 @@ from Alpha4.model import DNNPredict
 
 
 class DNNPredictRT(DNNPredict):
-    def __init__(self, log, input_dim, output_dim):
-        DNNPredict.__init__(self, log, input_dim, output_dim)
+    def __init__(self, log, input_dim, output_dim, **kwargs):
+        DNNPredict.__init__(self, log, input_dim, output_dim, **kwargs)
         self.frozen_predict = None
 
     def predict(self, state):

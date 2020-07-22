@@ -104,8 +104,9 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     database = Database(log, args.path_to_database, Problem.dims_state, Problem.dims_policy)
-    best_model = Predict(log, Problem.dims_state, Problem.dims_policy, database)
-    curr_model = Predict(log, Problem.dims_state, Problem.dims_policy, database)
+    tf_lite_args = {"database": database, "delegate": None, "compile_tpu": True}
+    best_model = Predict(log, Problem.dims_state, Problem.dims_policy, **tf_lite_args)
+    curr_model = Predict(log, Problem.dims_state, Problem.dims_policy, **tf_lite_args)
 
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):
         best_model.save(os.path.join(args.root_dir, 'models', 'best_0'))

@@ -144,7 +144,7 @@ class ResidualCNN:
 
 
 class DNNPredict(ResidualCNN):
-    def __init__(self, log, input_dim, output_dim):
+    def __init__(self, log, input_dim, output_dim, **kwargs):
         ResidualCNN.__init__(self, input_dim, output_dim)
         self.log = log
 

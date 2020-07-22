@@ -8,15 +8,15 @@ from Alpha4.model import DNNPredict
 
 
 class DNNPredictLite(DNNPredict):
-    def __init__(self, log, input_dim, output_dim, database, delegate=None, compile_tpu=True):
-        DNNPredict.__init__(self, log, input_dim, output_dim)
-        self.database = database
-        self.delegate = delegate
-        self.compile_tpu = compile_tpu
+    def __init__(self, log, input_dim, output_dim, **kwargs):
+        DNNPredict.__init__(self, log, input_dim, output_dim, **kwargs)
         self.interpreter = None
         self.tflite_model = None
         self.input_details = None
         self.output_details = None
+        self.database = kwargs["database"]
+        self.delegate = kwargs["delegate"]
+        self.compile_tpu = kwargs["compile_tpu"]
 
     def predict(self, state):
         state = tf.convert_to_tensor(state, dtype=tf.float32)
