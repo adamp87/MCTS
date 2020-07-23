@@ -44,11 +44,11 @@ def self_play(args, best_model, curr_model, database, log):
         while not problem.is_finished():
             # execute search for current player, returns action to select, current state of game and computed policy
             idx_ai = problem.get_player()
-            idx_op = (idx_ai + 1) % 2
             action, state, policy = mcts[idx_ai].execute(800, problem, is_deterministic=False)
 
             # update tree and game
-            mcts[idx_op].update(action)
+            for player_idx in range(2):
+                mcts[player_idx].update(action)
             problem.update(action)
 
             # store input state and output policy for DNN training
@@ -81,12 +81,13 @@ def evaluate(args, best_model, curr_model, log):
         while not problem.is_finished():
             # execute search for current player
             idx_ai = problem.get_player()
-            idx_op = (idx_ai + 1) % 2
-            action, _, _ = mcts[idx_ai].execute(1600, problem, is_deterministic=True)
+            action = mcts[idx_ai].execute(1600, problem, is_deterministic=True)
 
             # update tree and game
-            mcts[idx_op].update(action)
+            for player_idx in range(2):
+                mcts[player_idx].update(action)
             problem.update(action)
+            log.debug("State of evaluation game {0}:{1}{2}".format(game_idx, os.linesep, problem))
         result = problem.get_result()
 
         if result[best_idx] == 1:

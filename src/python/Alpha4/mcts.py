@@ -120,7 +120,8 @@ class MCTS:
 
     def execute(self, iterations, cstate, is_deterministic):
         """
-        Execute MCTS+DNN algorithm to get next action for problem
+        Execute MCTS+DNN search algorithm to get next action for problem
+        Algorithm does not move in tree, search can be executed multiple times
         :param iterations: number of policy iterations
         :param cstate: state of the problem, do not modify this variable
         :param is_deterministic: move selection (deterministic or stochastic)
@@ -136,10 +137,16 @@ class MCTS:
             self._backprop(policy_nodes, w)  # write back results to visited nodes
 
         # select move
-        state = None
-        policy = None
         if is_deterministic:  # deterministic decision
             idx = MCTS._move_deterministic(self.sub_root.childs)  # get index of action to select
+
+            # debug, see results of choices
+            for i in range(len(self.sub_root.childs)):
+                child = self.sub_root.childs[i]
+                q = child.w / (child.n + np.finfo(np.float32).eps)
+                self.log.debug("{0}; W: {1}; N: {2}; Q: {3}".format(child.action, child.w, child.n, q))
+
+            return self.sub_root.childs[int(idx)].action  # return action
         else:  # stochastic decision, returns state and policy to save for training
             time = cstate.get_time()  # time of the problem (e.g. steps made)
             state = cstate.get_game_state_dnn()  # get input layer for dnn training
@@ -147,15 +154,13 @@ class MCTS:
             actions = [child.action for child in self.sub_root.childs]  # get all possible actions
             policy = cstate.get_policy_train_dnn(actions, pi)  # get output layer for dnn training
 
-        # debug, see results of choices
-        for i in range(len(self.sub_root.childs)):
-            child = self.sub_root.childs[i]
-            self.log.debug("{0}; W: {1}; N: {2}; Q: {3}".format(child.action, child.w, child.n, child.w / child.n))
+            # debug, see results of choices
+            for i in range(len(self.sub_root.childs)):
+                child = self.sub_root.childs[i]
+                q = child.w / (child.n + np.finfo(np.float32).eps)
+                self.log.debug("{0}; Pi: {1}, W: {2}; N: {3}; Q: {4}".format(child.action, pi[i], child.w, child.n, q))
 
-        # set new root
-        new_sub_root = self.sub_root.childs[idx]  # select best action
-        self.sub_root = new_sub_root  # set new subroot (keep root, so the complete tree is stored, debugging)
-        return new_sub_root.action, state, policy
+            return self.sub_root.childs[idx].action, state, policy  # return action, state, policy
 
     def update(self, action):
         """
