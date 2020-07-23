@@ -1,3 +1,9 @@
+"""
+Implementation of the Monte-Carlo Tree Search
+
+Author: AdamP 2020-2020
+"""
+
 import numpy as np
 
 
@@ -56,7 +62,7 @@ class MCTS:
         Computes upper confidence bound
         :param parent: node for which children' the ucb will be computed
         :param dirichlet_noise: noise applied for root node
-        :param ucb_c: predefined constant for each problem
+        :param ucb_c: predefined constant by each problem for weighting exploration
         :return: numpy array of ucb value for each node
         """
         sum_n = np.sqrt(parent.n)  # parent visit equals to the sum of each child's visit
@@ -106,7 +112,7 @@ class MCTS:
         """
         tau = 1.0 if time < 60 else 0.05
         n = np.array([child.n for child in childs])  # get visit count for children
-        pi = np.power(n, 1/tau)
+        pi = np.power(n, 1/tau)  # decrease randomness as time elapses
         pi = pi / np.sum(pi)  # normalize distribution
         idx = np.random.choice(np.arange(len(pi), dtype=int), 1, p=pi)[0]  # select from distribution
         return idx, pi
@@ -122,45 +128,49 @@ class MCTS:
         :return: state of the current problem for DNN input, only for stochastic else None
         :return: policy of the current problem for DNN output, only for stochastic else None
         """
+        # execute mcts search
         for i in range(iterations):
             policy_nodes = []  # visited nodes during current iteration
             state = cstate.copy()  # make mandatory copy of problem
             node, w = self._policy(state, policy_nodes)  # perform search in tree
             self._backprop(policy_nodes, w)  # write back results to visited nodes
 
+        # select move
         state = None
         policy = None
-        if is_deterministic:
+        if is_deterministic:  # deterministic decision
             idx = MCTS._move_deterministic(self.sub_root.childs)  # get index of action to select
-        else:
+        else:  # stochastic decision, returns state and policy to save for training
             time = cstate.get_time()  # time of the problem (e.g. steps made)
             state = cstate.get_game_state_dnn()  # get input layer for dnn training
             idx, pi = MCTS._move_stochastic(self.sub_root.childs, time)  # get index of action to select
             actions = [child.action for child in self.sub_root.childs]  # get all possible actions
             policy = cstate.get_policy_train_dnn(actions, pi)  # get output layer for dnn training
 
+        # debug, see results of choices
         for i in range(len(self.sub_root.childs)):
             child = self.sub_root.childs[i]
             log.debug("{0}; W: {1}; N: {2}; Q: {3}".format(child.action, child.w, child.n, child.w / child.n))
 
+        # set new root
         new_sub_root = self.sub_root.childs[idx]  # select best action
         self.sub_root = new_sub_root  # set new subroot (keep root, so the complete tree is stored, debugging)
         return new_sub_root.action, state, policy
 
     def update(self, action, log):
         """
-        Update tree according to opponent's move
-        :param action: last action made by opponent
+        Move one level deeper in tree according to action
+        :param action: action to select in current sub-root
         :param log: logging object
         :return: None
         """
-        if len(self.sub_root.childs) == 0:
-            self.sub_root.childs = [MCTSNode(action, 1.0)]
-            self.sub_root = self.sub_root.childs[0]
+        if len(self.sub_root.childs) == 0:  # current root has no children
+            self.sub_root.childs = [MCTSNode(action, 1.0)]  # create new child
+            self.sub_root = self.sub_root.childs[0]  # set new subroot (keep root, so complete tree is stored, debug)
             return
-        for child in self.sub_root.childs:
-            if child.action == action:
-                self.sub_root = child
+        for child in self.sub_root.childs:  # search in children (node must have all possible children)
+            if child.action == action:  # found child with action to take
+                self.sub_root = child  # set new subroot (keep root, so complete tree is stored, debug)
                 return
         log.critical("Action not found during update")
         exit(-1)

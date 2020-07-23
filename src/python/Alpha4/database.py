@@ -1,8 +1,18 @@
+"""
+Implementation of a database using the HDF5 library
+
+Author: AdamP 2020-2020
+"""
+
 import h5py
 import numpy as np
 
 
 class Database:
+    """
+    Implementation of database to store input/output tensors for DNN training
+    Stores the input state and output policy and value tensors.
+    """
     def __init__(self, log, datafilepath_hdf, dims_state, dims_policy):
         self.log = log
         if not h5py.is_hdf5(datafilepath_hdf):
@@ -36,6 +46,7 @@ class Database:
         datafile.close()
 
     def store(self, game_idx, data_state, data_policy, data_result):
+        """Stores the simulated data of one self-play game"""
         if len(data_state) != len(data_policy) != len(data_result):
             self.log.error("Error with result size")
             exit(-1)
@@ -64,6 +75,15 @@ class Database:
         self.datafile.flush()
 
     def load(self, count):
+        """
+        Returns maximum 'count' number of samples from self-play games.
+        The function selects random samples from the database.
+        If database has less samples then 'count', all samples are returned.
+
+        :return: state: Input state tensors
+        :return: policy: Output policy tensor
+        :return: value: Output value array
+        """
         n_states = self.get_state_count()
         idx = np.random.choice(np.arange(0, n_states, 1), np.min((count, n_states)), replace=False)
         idx = np.sort(idx)  # hdf5 requires sorted index

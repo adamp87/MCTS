@@ -1,3 +1,10 @@
+"""
+Helper functions to set up formatted logging to console with level info.
+File logger can be added with level debug.
+
+Author: AdamP 2020-2020
+"""
+
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -7,6 +14,7 @@ def _get_formatter():
 
 
 def get_logger():
+    """Returns formatted info logger to console"""
     log = logging.getLogger('')
     log.setLevel(logging.DEBUG)
     log_formatter = _get_formatter()
@@ -19,6 +27,7 @@ def get_logger():
 
 
 def add_file_logger(log, log_path):
+    """Add logging to file with debug level to existing log"""
     # set up logging to file
     log_file = logging.handlers.RotatingFileHandler(log_path, 'a', maxBytes=1024*1024, backupCount=1024*1024)
     log_file.setFormatter(_get_formatter())

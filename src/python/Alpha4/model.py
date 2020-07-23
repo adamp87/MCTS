@@ -1,14 +1,20 @@
-import os
-from tqdm import tqdm
+"""
+Implementation of a replica of proposed Deep Neural Network by DeepMind (class AlphaNet)
+Class that inherits AlphaNet, retraining and inference with non-freezed models both on CPU and GPU (DNNPredict)
 
+Author: AdamP 2020-2020
+"""
+
+import os
+
+from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras import regularizers
-from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Dense, Conv2D, Flatten, BatchNormalization, ReLU, add
 from tensorflow.keras.optimizers import Adam
 
 
-class ResidualCNN:
+class AlphaNet:
     """
     Replica of the neural network proposed by DeepMind - AlphaZero
     """
@@ -124,17 +130,21 @@ class ResidualCNN:
 
     def _build_model(self):
 
+        # input layer
         main_input = Input(shape=self.input_dim, name='main_input')
 
+        # first convolution layer
         x = self.conv_layer(main_input, self.hidden_layers[0]['filters'], self.hidden_layers[0]['kernel_size'])
 
+        # hidden layers
         for h in self.hidden_layers[1:]:
             x = self.residual_layer(x, h['filters'], h['kernel_size'])
 
+        # value and policy output layers
         vh = self.value_head(x)
         ph = self.policy_head(x)
 
-        model = Model(inputs=[main_input], outputs=[vh, ph])
+        model = tf.keras.Model(inputs=[main_input], outputs=[vh, ph])
         model.compile(loss={'value_head': 'mean_squared_error', 'policy_head': tf.nn.softmax_cross_entropy_with_logits},
                       optimizer=Adam(learning_rate=self.learning_rate),
                       loss_weights={'value_head': 0.5, 'policy_head': 0.5}
@@ -143,16 +153,27 @@ class ResidualCNN:
         return model
 
 
-class DNNPredict(ResidualCNN):
+class DNNPredict(AlphaNet):
+    """
+    Implements prediction and retraining of non-freezed models.
+    """
     def __init__(self, log, input_dim, output_dim, **kwargs):
-        ResidualCNN.__init__(self, input_dim, output_dim)
+        AlphaNet.__init__(self, input_dim, output_dim)
         self.log = log
 
     def predict(self, state):
+        """
+        Prediction of value and policy based on an input state.
+        Can be executed on non-freezed models both on CPU and GPU.
+        :param state: Input tensor of a game state.
+        :return: value: single value describing the chance to win
+        :return: policy: tensor describing which next position should be investigated
+        """
         value, policy = self.model.predict(state)
         return value[0, 0], policy
 
     def retrain(self, args, database):
+        """Performs retraining of the model"""
         fit = None
         self.log.info("Retraining")
         for _ in tqdm(range(args.train_epochs)):  # select different data for each epoch
@@ -169,8 +190,10 @@ class DNNPredict(ResidualCNN):
                                                                         fit.history['policy_head_loss']))
 
     def save(self, path):
+        """Save model weight"""
         self.model.save_weights(os.path.join(path, 'weights', 'weights'))
         tf.saved_model.save(self.model, os.path.join(path, 'saved'))
 
     def load(self, path):
+        """Load model weight"""
         self.model.load_weights(os.path.join(path, 'weights', 'weights'))

@@ -1,3 +1,9 @@
+"""
+Implementation of Connect4, a problem to be solved by AlphaZero framework.
+
+Author: AdamP 2020-2020
+"""
+
 import numpy as np
 
 
@@ -17,14 +23,14 @@ class Connect4Action:
 class Connect4:
     """
     Implementation of the game Connect4.
-    A problem to be solved by the MCTS.
+    Implements the required interfaces for MCTS and for the AlphaZero framework.
     """
-    ALPHA = 1.0 / 7.0  # in average seven actions are possible
-    UCT_C = 1.0  # constant for ucb computation
+    ALPHA = 1.0 / 7.0  # in average seven actions are possible, value for dirichlet distribution
+    UCT_C = 1.0  # constant for ucb computation, for weighting exploration
     dnn_history = 2  # number of previous turns to add to dnn
     dims_state = (6, 7, 3 * (dnn_history + 1))  # dimension of the input state
     dims_policy = (6, 7, 1)  # dimension of the output policy
-    name = "connect4"
+    name = "connect4"  # helper for filenames
 
     def __init__(self, model_p1, model_p2):
         self.time = 0  # incremented on each move
@@ -75,49 +81,54 @@ class Connect4:
         return actions
 
     def update(self, action):
-        """Update state based on action, note: action validity is not checked"""
-        # TODO doc
-        def is_inside(x, y, dx, dy):
-            xx = x + dx
-            yy = y + dy
+        """Update game state based on action, note: action validity is not checked"""
+        def is_inside(_x, _y, dx, dy):
+            """Helper function: is position in board"""
+            xx = _x + dx
+            yy = _y + dy
             return 0 <= xx < 7 and 0 <= yy < 6
 
-        def is_own_stone(x, y, dx, dy):
-            return is_inside(x, y, dx, dy) and self.board[y+dy, x+dx] == self.board[y, x]
+        def is_own_stone(_x, _y, dx, dy):
+            """Helper function: is stone current players stone"""
+            return is_inside(_x, _y, dx, dy) and self.board[_y+dy, _x+dx] == self.board[_y, _x]
 
-        def scan_line(x, y, ddx, ddy):
+        def scan_line(_x, _y, ddx, ddy):
+            """Helper function: check in one line if current player won"""
             count = 1
             for n in range(1, 7):
-                if not is_own_stone(x, y, n * ddx, n * ddy):
-                    break
+                if not is_own_stone(_x, _y, n * ddx, n * ddy):
+                    break  # empty or opponent stone
                 count += 1
             return count >= 4
 
-        empty_count = 0
-        idx_ai = self.get_player()
-        self.history.append(self.board.copy())
-        self.board[action.y, action.x] = idx_ai + 1
+        empty_count = 0  # count empty positions
+        idx_ai = self.get_player()  # idx of current player
+        self.history.append(self.board.copy())  # store last state in history
+        self.board[action.y, action.x] = idx_ai + 1  # update board with action (board stores idx+1)
 
+        # verify if player won or game even
         for y in range(6):
             for x in range(7):
                 if self.board[y, x] == 0:
-                    empty_count += 1
+                    empty_count += 1  # empty position
                 if self.board[y, x] != idx_ai+1:
-                    continue
+                    continue  # opponents stone
 
-                if scan_line(x, y, 0, 1):
+                # check if current player won
+                if scan_line(x, y, 0, 1):  # horizontal
                     self.finished[idx_ai] = True
-                if scan_line(x, y, 1, 0):
+                if scan_line(x, y, 1, 0):  # vertical
                     self.finished[idx_ai] = True
-                if scan_line(x, y, 1, 1):
+                if scan_line(x, y, +1, 1):  # right diagonal
                     self.finished[idx_ai] = True
-                if scan_line(x, y, -1, 1):
+                if scan_line(x, y, -1, 1):  # left diagonal
                     self.finished[idx_ai] = True
 
+        # if there is no empty positions and no winner, game is even
         if empty_count == 0 and not self.finished[0] and not self.finished[1]:
             self.finished[0] = self.finished[1] = True  # even
 
-        self.time += 1
+        self.time += 1  # increment time
 
     def get_game_state_dnn(self):
         """Return input state for DNN"""
