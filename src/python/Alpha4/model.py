@@ -26,7 +26,7 @@ class AlphaNet:
         self.input_dim = input_dim
         self.output_dim = output_dim[0]*output_dim[1]*output_dim[2]  # flattened
         self.reg_const = 0.0001
-        self.learning_rate = 0.01
+        self.learning_rate = 0.001
 
         self.model = self._build_model()
 
@@ -87,7 +87,7 @@ class AlphaNet:
             256,
             use_bias=False,
             activation='linear',
-            kernel_regularizer=regularizers.l2(0.1)
+            kernel_regularizer=regularizers.l2(self.reg_const / 10)  # use stronger regularise
         )(x)
 
         x = ReLU()(x)
@@ -96,7 +96,7 @@ class AlphaNet:
             1,
             use_bias=False,
             activation='tanh',
-            kernel_regularizer=regularizers.l2(0.01),
+            kernel_regularizer=regularizers.l2(self.reg_const / 10),  # use stronger regularise
             name='value_head'
         )(x)
 

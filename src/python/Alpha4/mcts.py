@@ -47,6 +47,8 @@ class MCTS:
                 node.childs = [MCTSNode(a, p) for a, p in zip(actions, p)]  # construct children for leaf node
                 return node, w
 
+            # Discussion: a naive tree search should maximize the UCB when computing for himself
+            # and minimize when computing for the opponent. See more: chess.hpp computeMCTS_W()
             ucb = MCTS._get_ucb(node, dirichlet_noise, state.UCT_C)  # compute upper confidence bound
             idx = int(np.argmax(ucb))  # get highest ucb value
             node = node.childs[idx]  # select best child

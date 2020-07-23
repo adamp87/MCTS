@@ -13,9 +13,11 @@ import numpy as np
 import tensorflow as tf
 
 from Alpha4.mcts import MCTS
+# from Alpha4.model import DNNPredict as Predict
+# from Alpha4.model_rt import DNNPredictRT as Predict
 from Alpha4.model_lite import DNNPredictLite as Predict
 from Alpha4.database import Database
-from Alpha4.connect4 import Connect4 as Problem
+from Alpha4.connect4 import Connect4 as Game
 from Alpha4.logger import get_logger, add_file_logger
 
 
@@ -40,24 +42,24 @@ def self_play(args, best_model, curr_model, database, log):
         states = []
         policies = []
         mcts = [MCTS(log), MCTS(log)]  # tree for both players
-        problem = Problem(models[0], models[1])  # representation of game
-        while not problem.is_finished():
+        game = Game(models[0], models[1])  # representation of game
+        while not game.is_finished():
             # execute search for current player, returns action to select, current state of game and computed policy
-            idx_ai = problem.get_player()
-            action, state, policy = mcts[idx_ai].execute(800, problem, is_deterministic=False)
+            idx_ai = game.get_player()
+            action, state, policy = mcts[idx_ai].execute(800, game, is_deterministic=False)
 
             # update tree and game
             for player_idx in range(2):
                 mcts[player_idx].update(action)
-            problem.update(action)
+            game.update(action)
 
             # store input state and output policy for DNN training
             states.append(state)
             policies.append(policy)
-            log.debug("State of game {0}:{1}{2}".format(self_play_idx, os.linesep, problem))
-            # log.debug("Input DNN State:{0}{1}".format(os.linesep, problem.get_game_state_dnn()))
+            log.debug("State of game {0}:{1}{2}".format(self_play_idx, os.linesep, game))
+            # log.debug("Input DNN State:{0}{1}".format(os.linesep, game.get_game_state_dnn()))
         # get end result and repeat vector to have a corresponding result for each input state
-        result = problem.get_result()
+        result = game.get_result()
         result = np.tile(result, int(np.ceil(len(states)/2)))[:len(states)]
 
         database.store(self_play_idx, states, policies, result)
@@ -77,18 +79,18 @@ def evaluate(args, best_model, curr_model, log):
 
         # execute one game
         mcts = [MCTS(log), MCTS(log)]
-        problem = Problem(models[0], models[1])
-        while not problem.is_finished():
+        game = Game(models[0], models[1])
+        while not game.is_finished():
             # execute search for current player
-            idx_ai = problem.get_player()
-            action = mcts[idx_ai].execute(1600, problem, is_deterministic=True)
+            idx_ai = game.get_player()
+            action = mcts[idx_ai].execute(1600, game, is_deterministic=True)
 
             # update tree and game
             for player_idx in range(2):
                 mcts[player_idx].update(action)
-            problem.update(action)
-            log.debug("State of evaluation game {0}:{1}{2}".format(game_idx, os.linesep, problem))
-        result = problem.get_result()
+            game.update(action)
+            log.debug("State of evaluation game {0}:{1}{2}".format(game_idx, os.linesep, game))
+        result = game.get_result()
 
         if result[best_idx] == 1:
             scores[0] += 1
@@ -113,18 +115,18 @@ def main():
     # parser.add_argument("--human_play", action='store_true', help="Start server for human play")
     parser.add_argument("--iteration", type=int, default=0, help="Current iteration number to resume from")
     parser.add_argument("--total_iterations", type=int, default=100, help="Total number of iterations to run")
-    parser.add_argument("--self_plays", type=int, default=120, help="Number of self play games to execute")
-    parser.add_argument("--eval_plays", type=int, default=100, help="Number of evaluation play games to execute")
-    parser.add_argument("--path_to_database", type=str, default=Problem.name+'.hdf', help="Path to HDF file")
-    parser.add_argument("--train_epochs", type=int, default=300, help="Number of epochs for training")
+    parser.add_argument("--self_plays", type=int, default=2500, help="Number of self play games to execute")
+    parser.add_argument("--eval_plays", type=int, default=80, help="Number of evaluation play games to execute")
+    parser.add_argument("--path_to_database", type=str, default=Game.name+'.hdf', help="Path to HDF file")
+    parser.add_argument("--train_epochs", type=int, default=100, help="Number of epochs for training")
     parser.add_argument("--train_sample_size", type=int, default=256, help="Number of game states to use for training")
     args = parser.parse_args()
 
     # set up logging
     log = get_logger()
-    add_file_logger(log, os.path.join(args.root_dir, 'data', Problem.name+'.log'))
-    if args.path_to_database == Problem.name+'.hdf':
-        args.path_to_database = os.path.join(args.root_dir, 'data', Problem.name+'.hdf')
+    add_file_logger(log, os.path.join(args.root_dir, 'data', Game.name+'.log'))
+    if args.path_to_database == Game.name+'.hdf':
+        args.path_to_database = os.path.join(args.root_dir, 'data', Game.name+'.hdf')
 
     # set up TF GPU
     log.info("TensorFlow V: {0}, CUDA: {1}".format(tf.__version__, tf.test.is_built_with_cuda()))
@@ -133,10 +135,10 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
 
     # open database and init models
-    database = Database(log, args.path_to_database, Problem.dims_state, Problem.dims_policy)
+    database = Database(log, args.path_to_database, Game.dims_state, Game.dims_policy)
     tf_lite_args = {"database": database, "delegate": None, "compile_tpu": True}
-    best_model = Predict(log, Problem.dims_state, Problem.dims_policy, **tf_lite_args)
-    curr_model = Predict(log, Problem.dims_state, Problem.dims_policy, **tf_lite_args)
+    best_model = Predict(log, Game.dims_state, Game.dims_policy, **tf_lite_args)
+    curr_model = Predict(log, Game.dims_state, Game.dims_policy, **tf_lite_args)
 
     # load model weights and if available frozen models
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):
@@ -146,10 +148,11 @@ def main():
     best_model.load(os.path.join(args.root_dir, 'models', 'best_{0}'.format(args.iteration)))
     curr_model.load(os.path.join(args.root_dir, 'models', 'best_{0}'.format(args.iteration)))
 
-    # Test Code
-    # curr_model.load_weight(os.path.join(args.root_dir, 'models', 'save_1', 'weights'))
-    # value, policy = curr_model.predict(np.array(database.datafile["state"]), batch_size=512)
+    # Test Code, only for DNNPredict
+    # curr_model.load(os.path.join(args.root_dir, 'models', 'save_1'))
+    # value, policy = curr_model.predict(np.array(database.datafile["state"]))
     # print(np.unique(value, return_counts=True))
+    # exit(0)
 
     try:  # main loop for AlphaZero workflow
         for iteration_idx in range(args.iteration+1, args.iteration+args.total_iterations+1):
