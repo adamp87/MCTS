@@ -23,8 +23,9 @@ class MCTS:
     The tree search does not know the exact problem it solves.
     Each problem must implement the same interface functions.
     """
-    def __init__(self):
+    def __init__(self, log):
         """Construct tree and root node"""
+        self.log = log  # store logging
         self.root = MCTSNode(None, 0)  # artificial root node
         self.sub_root = self.root  # keep complete tree for debugging
 
@@ -117,13 +118,12 @@ class MCTS:
         idx = np.random.choice(np.arange(len(pi), dtype=int), 1, p=pi)[0]  # select from distribution
         return idx, pi
 
-    def execute(self, iterations, cstate, is_deterministic, log):
+    def execute(self, iterations, cstate, is_deterministic):
         """
         Execute MCTS+DNN algorithm to get next action for problem
         :param iterations: number of policy iterations
         :param cstate: state of the problem, do not modify this variable
         :param is_deterministic: move selection (deterministic or stochastic)
-        :param log: logging object
         :return: decided action to take in next step
         :return: state of the current problem for DNN input, only for stochastic else None
         :return: policy of the current problem for DNN output, only for stochastic else None
@@ -150,18 +150,17 @@ class MCTS:
         # debug, see results of choices
         for i in range(len(self.sub_root.childs)):
             child = self.sub_root.childs[i]
-            log.debug("{0}; W: {1}; N: {2}; Q: {3}".format(child.action, child.w, child.n, child.w / child.n))
+            self.log.debug("{0}; W: {1}; N: {2}; Q: {3}".format(child.action, child.w, child.n, child.w / child.n))
 
         # set new root
         new_sub_root = self.sub_root.childs[idx]  # select best action
         self.sub_root = new_sub_root  # set new subroot (keep root, so the complete tree is stored, debugging)
         return new_sub_root.action, state, policy
 
-    def update(self, action, log):
+    def update(self, action):
         """
         Move one level deeper in tree according to action
         :param action: action to select in current sub-root
-        :param log: logging object
         :return: None
         """
         if len(self.sub_root.childs) == 0:  # current root has no children
@@ -172,5 +171,5 @@ class MCTS:
             if child.action == action:  # found child with action to take
                 self.sub_root = child  # set new subroot (keep root, so complete tree is stored, debug)
                 return
-        log.critical("Action not found during update")
+        self.log.critical("Action not found during update")
         exit(-1)

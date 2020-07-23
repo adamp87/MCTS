@@ -39,16 +39,16 @@ def self_play(args, best_model, curr_model, database, log):
         # simulate one game
         states = []
         policies = []
-        mcts = [MCTS(), MCTS()]  # tree for both players
+        mcts = [MCTS(log), MCTS(log)]  # tree for both players
         problem = Problem(models[0], models[1])  # representation of game
         while not problem.is_finished():
             # execute search for current player, returns action to select, current state of game and computed policy
             idx_ai = problem.get_player()
             idx_op = (idx_ai + 1) % 2
-            action, state, policy = mcts[idx_ai].execute(800, problem, is_deterministic=False, log=log)
+            action, state, policy = mcts[idx_ai].execute(800, problem, is_deterministic=False)
 
             # update tree and game
-            mcts[idx_op].update(action, log)
+            mcts[idx_op].update(action)
             problem.update(action)
 
             # store input state and output policy for DNN training
@@ -76,16 +76,16 @@ def evaluate(args, best_model, curr_model, log):
         models[curr_idx] = curr_model
 
         # execute one game
-        mcts = [MCTS(), MCTS()]
+        mcts = [MCTS(log), MCTS(log)]
         problem = Problem(models[0], models[1])
         while not problem.is_finished():
             # execute search for current player
             idx_ai = problem.get_player()
             idx_op = (idx_ai + 1) % 2
-            action, _, _ = mcts[idx_ai].execute(1600, problem, True, log)
+            action, _, _ = mcts[idx_ai].execute(1600, problem, is_deterministic=True)
 
             # update tree and game
-            mcts[idx_op].update(action, log)
+            mcts[idx_op].update(action)
             problem.update(action)
         result = problem.get_result()
 
