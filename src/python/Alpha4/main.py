@@ -136,9 +136,9 @@ def main():
 
     # open database and init models
     database = Database(log, args.path_to_database, Game.dims_state, Game.dims_policy)
-    tf_lite_args = {"database": database, "delegate": None, "compile_tpu": True}
-    best_model = Predict(log, Game.dims_state, Game.dims_policy, **tf_lite_args)
+    tf_lite_args = {"database": database, "delegate": "libedgetpu.so.1", "device": "usb:0", "compile_tpu": True}
     curr_model = Predict(log, Game.dims_state, Game.dims_policy, **tf_lite_args)
+    best_model = Predict(log, Game.dims_state, Game.dims_policy, **tf_lite_args)
 
     # load model weights and if available frozen models
     if not os.path.isdir(os.path.join(args.root_dir, 'models', 'best_0')):

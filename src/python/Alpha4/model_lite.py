@@ -9,6 +9,7 @@ import subprocess
 
 import numpy as np
 import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 from Alpha4.model import DNNPredict
 
@@ -21,6 +22,7 @@ class DNNPredictLite(DNNPredict):
         self.tflite_model = None
         self.input_details = None
         self.output_details = None
+        self.device = kwargs["device"]
         self.database = kwargs["database"]
         self.delegate = kwargs["delegate"]
         self.compile_tpu = kwargs["compile_tpu"]
@@ -33,7 +35,6 @@ class DNNPredictLite(DNNPredict):
         :return: value: single value describing the chance to win
         :return: policy: tensor describing which next position should be investigated
         """
-        state = tf.convert_to_tensor(state, dtype=tf.float32)
         self.interpreter.set_tensor(self.input_details[0]['index'], state)
 
         self.interpreter.invoke()
@@ -94,7 +95,10 @@ class DNNPredictLite(DNNPredict):
         with tf.io.gfile.GFile(os.path.join(path, tf_name), 'rb') as f:
             self.tflite_model = f.read()
 
-        self.interpreter = tf.lite.Interpreter(model_content=self.tflite_model, experimental_delegates=self.delegate)
+        delegates = None
+        if self.delegate is not None:
+            delegates = [tflite.load_delegate(self.delegate, {"device": self.device})]
+        self.interpreter = tflite.Interpreter(model_content=self.tflite_model, experimental_delegates=delegates)
         self.interpreter.allocate_tensors()
 
         self.input_details = self.interpreter.get_input_details()
