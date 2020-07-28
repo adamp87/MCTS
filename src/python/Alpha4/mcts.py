@@ -38,12 +38,13 @@ class MCTS:
         :return: win value of last evaluation
         """
         node = self.sub_root
+        idx_ai = state.get_player()
         visited_nodes.append(node)  # store subroot in visited nodes
         dirichlet_noise = np.random.dirichlet([state.ALPHA] * len(node.childs))
         while not state.is_finished():
             if len(node.childs) == 0:  # leaf node
                 actions = state.get_actions()  # get possible actions
-                p, w = state.compute_mcts_wp(actions)  # evaluate position, get prior and win
+                p, w = state.compute_mcts_wp(idx_ai, actions)  # evaluate position, get prior and win
                 node.childs = [MCTSNode(a, p) for a, p in zip(actions, p)]  # construct children for leaf node
                 return node, w
 
@@ -56,7 +57,8 @@ class MCTS:
             state.update(node.action)  # update problem according to best move
             dirichlet_noise = None  # use only for subroot
 
-        _, w = state.compute_mcts_wp([])  # compute value of terminating node
+        # get result of terminating node (since state has been updated, get_player() returns opponent)
+        w = state.compute_mcts_wp(idx_ai, None)
         return node, w
 
     @staticmethod

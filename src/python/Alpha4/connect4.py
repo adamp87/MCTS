@@ -41,7 +41,7 @@ class Connect4:
 
     def __str__(self):
         fig = np.array([' ', 'O', 'X'], dtype=str)
-        board = np.flip(self.board)  # start printing out from top
+        board = np.flipud(self.board)  # start printing out from top
         return np.array2string(fig[board], separator='|')
 
     def copy(self):
@@ -142,18 +142,23 @@ class Connect4:
             state[:, :, 2 + t * 3] = self.get_player(self.time - t)  # layer to encode current player
         return state
 
-    def compute_mcts_wp(self, actions):
+    def compute_mcts_wp(self, idx_ai, actions):
         """
         Evaluate current state with DNN and predict priors for actions.
+        :param idx_ai: index of DNN to be executed for prediction
         :param actions: Actions to predict prior for.
-        :return: prediction of policy layer -> priors
+        :return: prediction of policy layer -> priors (if not end of game)
         :return: prediction of value layer -> win
         """
+        # return win value on game termination
+        if actions is None:
+            result = self.get_result()
+            return result[idx_ai]  # return win value
+
         # perform state evaluation with DNN
-        player_idx = self.get_player()
         state = self.get_game_state_dnn()
         state = np.expand_dims(state, axis=0)  # batch size 1
-        value, policy = self.models[player_idx].predict(state)
+        value, policy = self.models[idx_ai].predict(state)
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
 
         policy = np.array([policy[act.y, act.x, 0] for act in actions])  # collect valid policy values
