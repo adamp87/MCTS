@@ -523,7 +523,7 @@ public:
             }
         }
 
-        std::fill(data.data()+color_start, data.data() + color_start+color_count, getPlayer(time));
+        std::fill(data.data()+color_start, data.data() + color_start+color_count, idxMe);
         std::fill(data.data()+movecount_start, data.data() + movecount_start+movecount_count, time/200.0f);
         std::fill(data.data()+p1_castlingL_start, data.data() + p1_castlingL_start+p1_castlingL_count, p1castleL);
         std::fill(data.data()+p1_castlingR_start, data.data() + p1_castlingR_start+p1_castlingR_count, p1castleR);

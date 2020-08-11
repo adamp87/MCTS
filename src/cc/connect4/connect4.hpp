@@ -191,7 +191,7 @@ public:
             if (time-t>=0)
                 game = &history[history.size()-t];
         }
-        std::fill(data.data()+color_start, data.data()+color_start+color_count, getPlayer(time));
+        std::fill(data.data()+color_start, data.data()+color_start+color_count, idxMe);
     }
 
     void getPolicyTrainDNN(std::vector<float>& data, int idxMe, std::vector<std::pair<ActType, double> >& piAction) const {
