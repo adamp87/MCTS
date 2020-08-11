@@ -39,8 +39,8 @@ def self_play(args, best_model, curr_model, database, log):
         np.random.seed(seed)
 
         # simulate one game
-        states = []
-        policies = []
+        states = [[], []]
+        policies = [[], []]
         mcts = [MCTS(log), MCTS(log)]  # tree for both players
         game = Game(models[0], models[1])  # representation of game
         while not game.is_finished():
@@ -54,15 +54,17 @@ def self_play(args, best_model, curr_model, database, log):
             game.update(action)
 
             # store input state and output policy for DNN training
-            states.append(state)
-            policies.append(policy)
+            states[idx_ai].append(state)
+            policies[idx_ai].append(policy)
             log.debug("State of game {0}:{1}{2}".format(self_play_idx, os.linesep, game))
             # log.debug("Input DNN State:{0}{1}".format(os.linesep, game.get_game_state_dnn()))
-        # get end result and repeat vector to have a corresponding result for each input state
-        result = game.get_result()
-        result = np.tile(result, int(np.ceil(len(states)/2)))[:len(states)]
 
-        database.store(self_play_idx, states, policies, result)
+        # get end result and store training data
+        result = game.get_result()
+        for player_idx in range(2):
+            # generate value vector for each state
+            results = np.zeros(len(states[player_idx])) + result[player_idx]
+            database.store(self_play_idx, states[player_idx], policies[player_idx], results)
 
 
 def evaluate(args, best_model, curr_model, log):
