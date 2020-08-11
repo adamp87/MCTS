@@ -62,6 +62,9 @@ def self_play(args, best_model, curr_model, database, log):
         # get end result and store training data
         result = game.get_result()
         for player_idx in range(2):
+            # add end state for training
+            policies[player_idx].append(np.zeros(shape=Game.dims_policy))
+            states[player_idx].append(game.get_game_state_dnn(player_idx, player_idx))
             # generate value vector for each state
             results = np.zeros(len(states[player_idx])) + result[player_idx]
             database.store(self_play_idx, states[player_idx], policies[player_idx], results)
