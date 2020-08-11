@@ -27,6 +27,7 @@ class Connect4:
     """
     ALPHA = 1.0 / 7.0  # in average seven actions are possible, value for dirichlet distribution
     UCT_C = 1.0  # constant for ucb computation, for weighting exploration
+    TAU_TIME = 15  # number of steps after stochastic games change tau value
     dnn_history = 2  # number of previous turns to add to dnn
     dims_state = (6, 7, 3 * (dnn_history + 1))  # dimension of the input state
     dims_policy = (6, 7, 1)  # dimension of the output policy

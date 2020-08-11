@@ -107,15 +107,14 @@ class MCTS:
         return idx
 
     @staticmethod
-    def _move_stochastic(childs, time):
+    def _move_stochastic(childs, tau):
         """
         Select best move based on a distribution.
         :param childs: children of root node
-        :param time: current time of problem
+        :param tau: helps to decrease randomness with time
         :return: index of selected child
         :return: distribution probability for each children
         """
-        tau = 1.0 if time < 60 else 0.05
         n = np.array([child.n for child in childs])  # get visit count for children
         pi = np.power(n, 1/tau)  # decrease randomness as time elapses
         pi = pi / np.sum(pi)  # normalize distribution
@@ -152,9 +151,9 @@ class MCTS:
 
             return self.sub_root.childs[int(idx)].action  # return action
         else:  # stochastic decision, returns state and policy to save for training
-            time = cstate.get_time()  # time of the problem (e.g. steps made)
             state = cstate.get_game_state_dnn()  # get input layer for dnn training
-            idx, pi = MCTS._move_stochastic(self.sub_root.childs, time)  # get index of action to select
+            tau = 1.0 if cstate.get_time() < cstate.TAU_TIME else 0.05  # tau value for stochastic decision
+            idx, pi = MCTS._move_stochastic(self.sub_root.childs, tau)  # get index of action to select
             actions = [child.action for child in self.sub_root.childs]  # get all possible actions
             policy = cstate.get_policy_train_dnn(actions, pi)  # get output layer for dnn training
 
