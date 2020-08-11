@@ -20,7 +20,7 @@ class AlphaNet:
     """
     def __init__(self, input_dim, output_dim):
 
-        self.num_layers = 20  # AlphaZero: 40
+        self.num_layers = 5  # AlphaZero: 40
         self.hidden_layers = [{'filters': 128, 'kernel_size': (3, 3)} for _ in range(self.num_layers)]  # AlphaZero: 256
 
         self.input_dim = input_dim
@@ -87,7 +87,7 @@ class AlphaNet:
             256,
             use_bias=False,
             activation='linear',
-            kernel_regularizer=regularizers.l2(self.reg_const / 10)  # use stronger regularise
+            kernel_regularizer=regularizers.l2(self.reg_const)
         )(x)
 
         x = ReLU()(x)
@@ -96,7 +96,7 @@ class AlphaNet:
             1,
             use_bias=False,
             activation='tanh',
-            kernel_regularizer=regularizers.l2(self.reg_const / 10),  # use stronger regularise
+            kernel_regularizer=regularizers.l2(self.reg_const),
             name='value_head'
         )(x)
 

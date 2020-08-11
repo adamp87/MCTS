@@ -44,7 +44,7 @@ class MCTS:
         while not state.is_finished():
             if len(node.childs) == 0:  # leaf node
                 actions = state.get_actions()  # get possible actions
-                p, w = state.compute_mcts_wp(idx_ai, actions)  # evaluate position, get prior and win
+                p, w = state.compute_mcts_wp(idx_ai, state.get_player(), actions)  # evaluate game state with DNN
                 node.childs = [MCTSNode(a, p) for a, p in zip(actions, p)]  # construct children for leaf node
                 return node, w
 
@@ -58,7 +58,7 @@ class MCTS:
             dirichlet_noise = None  # use only for subroot
 
         # get result of terminating node (since state has been updated, get_player() returns opponent)
-        w = state.compute_mcts_wp(idx_ai, None)
+        _, w = state.compute_mcts_wp(idx_ai, idx_ai, [])
         return node, w
 
     @staticmethod
@@ -151,7 +151,8 @@ class MCTS:
 
             return self.sub_root.childs[int(idx)].action  # return action
         else:  # stochastic decision, returns state and policy to save for training
-            state = cstate.get_game_state_dnn()  # get input layer for dnn training
+            idx_ai = cstate.get_player()  # index of ai(DNN) who makes turn
+            state = cstate.get_game_state_dnn(idx_ai, idx_ai)  # get input layer for dnn training
             tau = 1.0 if cstate.get_time() < cstate.TAU_TIME else 0.05  # tau value for stochastic decision
             idx, pi = MCTS._move_stochastic(self.sub_root.childs, tau)  # get index of action to select
             actions = [child.action for child in self.sub_root.childs]  # get all possible actions

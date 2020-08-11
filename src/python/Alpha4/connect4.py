@@ -29,7 +29,7 @@ class Connect4:
     UCT_C = 1.0  # constant for ucb computation, for weighting exploration
     TAU_TIME = 15  # number of steps after stochastic games change tau value
     dnn_history = 2  # number of previous turns to add to dnn
-    dims_state = (6, 7, 3 * (dnn_history + 1))  # dimension of the input state
+    dims_state = (6, 7, 2 * (dnn_history + 1) + 1)  # dimension of the input state
     dims_policy = (6, 7, 1)  # dimension of the output policy
     name = "connect4"  # helper for filenames
 
@@ -131,33 +131,32 @@ class Connect4:
 
         self.time += 1  # increment time
 
-    def get_game_state_dnn(self):
+    def get_game_state_dnn(self, idx_ai, idx_move):
         """Return input state for DNN"""
-        boards = [self.board]
-        boards += [self.history[-1 - i] for i in range(min(Connect4.dnn_history, len(self.history)))]
+        p1_start = 0
+        p2_start = Connect4.dnn_history + 1
+        fig_ai = idx_ai + 1
+        fig_op = ((idx_ai + 1) % 2) + 1
         state = np.zeros(Connect4.dims_state, dtype=np.float32)
+        boards = [self.board] + [self.history[-1 - i] for i in range(min(Connect4.dnn_history, len(self.history)))]
         for t in range(len(boards)):
             board = boards[t]
-            state[board == 1, 0 + t * 3] = 1  # one-hot encoding for player 1
-            state[board == 2, 1 + t * 3] = 1  # one-hot encoding for player 2
-            state[:, :, 2 + t * 3] = self.get_player(self.time - t)  # layer to encode current player
+            state[board == fig_ai, p1_start + t] = 1  # one-hot encoding for player ai
+            state[board == fig_op, p2_start + t] = 1  # one-hot encoding for player op
+        state[:, :, -1] = idx_ai  # layer to encode player's color
         return state
 
-    def compute_mcts_wp(self, idx_ai, actions):
+    def compute_mcts_wp(self, idx_ai, idx_move, actions):
         """
         Evaluate current state with DNN and predict priors for actions.
-        :param idx_ai: index of DNN to be executed for prediction
+        :param idx_ai: index of ai(DNN) to be executed for prediction
+        :param idx_move: index of player who makes next move
         :param actions: Actions to predict prior for.
-        :return: prediction of policy layer -> priors (if not end of game)
+        :return: prediction of policy layer -> priors
         :return: prediction of value layer -> win
         """
-        # return win value on game termination
-        if actions is None:
-            result = self.get_result()
-            return result[idx_ai]  # return win value
-
         # perform state evaluation with DNN
-        state = self.get_game_state_dnn()
+        state = self.get_game_state_dnn(idx_ai, idx_move)
         state = np.expand_dims(state, axis=0)  # batch size 1
         value, policy = self.models[idx_ai].predict(state)
         policy.shape = Connect4.dims_policy  # policy is flattened, reshape
