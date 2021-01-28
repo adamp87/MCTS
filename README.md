@@ -119,7 +119,7 @@ Now the algorithm will explore the opponents move, which takes the knight as lon
 
 ### Traveling Salesman Problem (TSP) (Deprecated)
 
-The TSP is an NP-complete problem, which makes it computationally expensive to find the optimal solution, but easy to verify if an optimal solutions exists.
+The TSP is an NP-complete problem, which means it is computationally expensive to find the optimal solution, but easy to verify a solution.
 It is also a benchmark for approximation algorithms, where a close to optimal solution is searched.
 The MCTS is not exactly for such problems designed, but it is possible to apply it.
 Basically the selection of graph nodes/edges can be modeled as a tree.
