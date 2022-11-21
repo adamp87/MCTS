@@ -1,4 +1,4 @@
 tqdm
 h5py
 numpy
-tensorflow-gpu==2.2
+tensorflow-gpu==2.9.3
